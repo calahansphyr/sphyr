@@ -6,6 +6,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { monitoringService } from '../../lib/monitoring';
 import { SystemError } from '../../lib/errors';
+import { logger } from '../../lib/logger';
 
 interface ErrorBoundaryState {
   hasError: boolean;
@@ -87,12 +88,16 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
 
     // Log to console in development
     if (process.env.NODE_ENV === 'development') {
-      console.group('🚨 React Error Boundary Caught Error');
-      console.error('Error:', error);
-      console.error('Error Info:', errorInfo);
-      console.error('Error ID:', errorId);
-      console.error('Retry Count:', this.state.retryCount);
-      console.groupEnd();
+      logger.error('React Error Boundary caught error', error, {
+        operation: 'error_boundary',
+        component: 'ErrorBoundary',
+        errorId: errorId,
+        retryCount: this.state.retryCount,
+        errorInfo: {
+          componentStack: errorInfo.componentStack,
+          errorBoundary: errorInfo.errorBoundary
+        }
+      });
     }
   }
 
@@ -134,7 +139,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       }));
     } else {
       // Max retries reached, keep error state
-      console.warn('Error boundary max retries reached, keeping error state');
+      logger.warn('Error boundary max retries reached, keeping error state', {
+        operation: 'error_boundary_retry',
+        component: 'ErrorBoundary',
+        retryCount: this.state.retryCount,
+        maxRetries: 3
+      });
     }
   };
 

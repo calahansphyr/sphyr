@@ -6,6 +6,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { createClient } from '../lib/supabase/client';
 import { productAnalytics } from '../lib/analytics';
+import { logger } from '../lib/logger';
 import type { User } from '@supabase/supabase-js';
 // import type { AuthTokens } from '../components/auth/utils/auth-helpers';
 
@@ -68,7 +69,10 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
         setUser(session.user);
       }
     } catch (error) {
-      console.error('Auth initialization error:', error);
+      logger.error('Auth initialization failed', error, {
+        operation: 'auth_initialization',
+        component: 'AuthContext'
+      });
     } finally {
       setIsLoading(false);
     }
@@ -94,7 +98,11 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
         setUser(data.user);
       }
     } catch (error) {
-      console.error('Login error:', error);
+      logger.error('User login failed', error, {
+        operation: 'user_login',
+        component: 'AuthContext',
+        email: email // Email is safe to log as it's user input
+      });
       throw error;
     } finally {
       setIsLoading(false);
@@ -137,11 +145,20 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
             }
           );
         } catch (analyticsError) {
-          console.warn('Failed to track user signup analytics:', analyticsError);
+          logger.warn('Failed to track user signup analytics', {
+            operation: 'analytics_tracking',
+            component: 'AuthContext',
+            event: 'user_signup',
+            error: analyticsError instanceof Error ? analyticsError.message : 'Unknown analytics error'
+          });
         }
       }
     } catch (error) {
-      console.error('Registration error:', error);
+      logger.error('User registration failed', error, {
+        operation: 'user_registration',
+        component: 'AuthContext',
+        email: email // Email is safe to log as it's user input
+      });
       throw error;
     } finally {
       setIsLoading(false);
@@ -157,7 +174,11 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
       setUser(null);
       window.location.href = '/auth/login';
     } catch (error) {
-      console.error('Logout error:', error);
+      logger.error('User logout failed', error, {
+        operation: 'user_logout',
+        component: 'AuthContext',
+        userId: user?.id
+      });
     }
   }
 
@@ -169,7 +190,11 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
       const { data, error } = await supabase.auth.refreshSession();
       
       if (error) {
-        console.error('Token refresh error:', error);
+        logger.error('Token refresh failed', error, {
+          operation: 'token_refresh',
+          component: 'AuthContext',
+          userId: user?.id
+        });
         await logout();
         return false;
       }
@@ -181,7 +206,11 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
 
       return false;
     } catch (error) {
-      console.error('Token refresh error:', error);
+      logger.error('Token refresh failed with exception', error, {
+        operation: 'token_refresh',
+        component: 'AuthContext',
+        userId: user?.id
+      });
       await logout();
       return false;
     }

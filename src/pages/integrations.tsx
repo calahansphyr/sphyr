@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
 import { useAuth } from '../context/AuthContext';
+import { logger } from '../lib/logger';
 
 interface IntegrationStatus {
   provider: string;
@@ -146,7 +147,11 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/google/connect';
     } catch (error) {
-      console.error('Error connecting Google:', error);
+      logger.error('Failed to initiate Google connection', error, {
+        operation: 'integration_connect',
+        component: 'IntegrationsPage',
+        provider: 'google'
+      });
       setMessage({ type: 'error', text: 'Failed to initiate Google connection. Please try again.' });
       setIsConnecting(null);
     }
@@ -158,7 +163,11 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/slack/connect';
     } catch (error) {
-      console.error('Error connecting Slack:', error);
+      logger.error('Failed to initiate Slack connection', error, {
+        operation: 'integration_connect',
+        component: 'IntegrationsPage',
+        provider: 'slack'
+      });
       setMessage({ type: 'error', text: 'Failed to initiate Slack connection. Please try again.' });
       setIsConnecting(null);
     }
@@ -170,7 +179,11 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/asana/connect';
     } catch (error) {
-      console.error('Error connecting Asana:', error);
+      logger.error('Failed to initiate Asana connection', error, {
+        operation: 'integration_connect',
+        component: 'IntegrationsPage',
+        provider: 'asana'
+      });
       setMessage({ type: 'error', text: 'Failed to initiate Asana connection. Please try again.' });
       setIsConnecting(null);
     }
@@ -182,7 +195,11 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/quickbooks/connect';
     } catch (error) {
-      console.error('Error connecting QuickBooks:', error);
+      logger.error('Failed to initiate QuickBooks connection', error, {
+        operation: 'integration_connect',
+        component: 'IntegrationsPage',
+        provider: 'quickbooks'
+      });
       setMessage({ type: 'error', text: 'Failed to initiate QuickBooks connection. Please try again.' });
       setIsConnecting(null);
     }
@@ -194,7 +211,11 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/microsoft/connect';
     } catch (error) {
-      console.error('Error connecting Microsoft:', error);
+      logger.error('Failed to initiate Microsoft connection', error, {
+        operation: 'integration_connect',
+        component: 'IntegrationsPage',
+        provider: 'microsoft'
+      });
       setMessage({ type: 'error', text: 'Failed to initiate Microsoft connection. Please try again.' });
       setIsConnecting(null);
     }
@@ -206,7 +227,11 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/procore/connect';
     } catch (error) {
-      console.error('Error connecting Procore:', error);
+      logger.error('Failed to initiate Procore connection', error, {
+        operation: 'integration_connect',
+        component: 'IntegrationsPage',
+        provider: 'procore'
+      });
       setMessage({ type: 'error', text: 'Failed to initiate Procore connection. Please try again.' });
       setIsConnecting(null);
     }
@@ -214,7 +239,11 @@ export default function IntegrationsPage() {
 
   const handleDisconnect = async (provider: string) => {
     // TODO: Implement disconnect functionality
-    console.log(`Disconnect ${provider} - not implemented yet`);
+    logger.info('Disconnect functionality not yet implemented', {
+      operation: 'integration_disconnect',
+      component: 'IntegrationsPage',
+      provider: provider
+    });
   };
 
   if (isLoading) {

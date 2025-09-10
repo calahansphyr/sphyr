@@ -5,6 +5,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { searchService } from '../lib/search/search-service';
+import { logger } from '../lib/logger';
 import type { SearchResult, SearchQuery, SearchHistoryItem } from '../components/search/utils/search-helpers';
 
 interface UseSearchOptions {
@@ -62,7 +63,10 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
       const historyData = await searchService.getSearchHistory();
       setHistory(historyData);
     } catch (err) {
-      console.error('Failed to load history:', err);
+      logger.error('Failed to load search history', err, {
+        operation: 'load_search_history',
+        component: 'useSearch'
+      });
       setHistory([]);
     }
   }, []);
@@ -178,7 +182,11 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
       const newSuggestions = await searchService.getSuggestions(searchQuery);
       setSuggestions(newSuggestions);
     } catch (err) {
-      console.error('Failed to get suggestions:', err);
+      logger.error('Failed to get search suggestions', err, {
+        operation: 'get_search_suggestions',
+        component: 'useSearch',
+        query: query
+      });
       setSuggestions([]);
     }
   }, []);
