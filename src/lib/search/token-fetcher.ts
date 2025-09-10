@@ -55,90 +55,102 @@ export class TokenFetcher {
   ) {}
 
   /**
-   * Fetch all OAuth tokens for a user in parallel
+   * Fetch all OAuth tokens for a user with optimized single query
    */
   async fetchAllTokens(userId: string): Promise<TokenFetchResult> {
     const supabase = createClient(this.req, this.res);
     
-    // Fetch all tokens in parallel
-    const [
-      googleResult,
-      slackResult,
-      asanaResult,
-      quickbooksResult,
-      microsoftResult,
-      procoreResult
-    ] = await Promise.allSettled([
-      supabase.from('oauth_tokens').select('*').eq('user_id', userId).eq('provider', 'google').single(),
-      supabase.from('oauth_tokens').select('*').eq('user_id', userId).eq('provider', 'slack').single(),
-      supabase.from('oauth_tokens').select('*').eq('user_id', userId).eq('provider', 'asana').single(),
-      supabase.from('oauth_tokens').select('*').eq('user_id', userId).eq('provider', 'quickbooks').single(),
-      supabase.from('oauth_tokens').select('*').eq('user_id', userId).eq('provider', 'microsoft').single(),
-      supabase.from('oauth_tokens').select('*').eq('user_id', userId).eq('provider', 'procore').single(),
-    ]);
+    // Fetch all tokens in a single optimized query
+    const { data: tokenRecords, error } = await supabase
+      .from('oauth_tokens')
+      .select('*')
+      .eq('user_id', userId)
+      .in('provider', ['google', 'slack', 'asana', 'quickbooks', 'microsoft', 'procore']);
 
-    const tokens: OAuthTokens = {};
-
-    // Process Google tokens (required)
-    if (googleResult.status === 'fulfilled' && googleResult.value.data) {
-      const googleTokens = googleResult.value.data as OAuthTokenRecord;
-      tokens.google = {
-        accessToken: googleTokens.access_token,
-        refreshToken: googleTokens.refresh_token,
-      };
-    } else {
+    if (error) {
       throw new IntegrationError(
-        'Google',
-        'No Google account connected. Please connect your Google account in Settings.',
-        { error: googleResult.status === 'rejected' ? googleResult.reason : 'No tokens found' }
+        'Database',
+        'Failed to fetch OAuth tokens from database',
+        { error: error.message, userId }
       );
     }
 
-    // Process optional tokens
-    if (slackResult.status === 'fulfilled' && slackResult.value.data) {
-      const slackTokens = slackResult.value.data as OAuthTokenRecord;
-      tokens.slack = {
-        accessToken: slackTokens.access_token,
-        refreshToken: slackTokens.refresh_token,
-      };
+    const tokens: OAuthTokens = {};
+
+    // Process tokens from the single query result
+    if (tokenRecords && tokenRecords.length > 0) {
+      // Create a map for quick lookup
+      const tokenMap = new Map(tokenRecords.map(record => [record.provider, record]));
+
+      // Process Google tokens (required)
+      const googleTokens = tokenMap.get('google');
+      if (googleTokens) {
+        tokens.google = {
+          accessToken: googleTokens.access_token_encrypted,
+          refreshToken: googleTokens.refresh_token_encrypted,
+        };
+      } else {
+        throw new IntegrationError(
+          'Google',
+          'No Google account connected. Please connect your Google account in Settings.',
+          { error: 'No Google tokens found', userId }
+        );
+      }
+
+      // Process optional tokens
+      const slackTokens = tokenMap.get('slack');
+      if (slackTokens) {
+        tokens.slack = {
+          accessToken: slackTokens.access_token_encrypted,
+          refreshToken: slackTokens.refresh_token_encrypted,
+        };
+      }
+
+      const asanaTokens = tokenMap.get('asana');
+      if (asanaTokens) {
+        tokens.asana = {
+          accessToken: asanaTokens.access_token_encrypted,
+          refreshToken: asanaTokens.refresh_token_encrypted,
+        };
+      }
+
+      const quickbooksTokens = tokenMap.get('quickbooks');
+      if (quickbooksTokens) {
+        tokens.quickbooks = {
+          accessToken: quickbooksTokens.access_token_encrypted,
+          refreshToken: quickbooksTokens.refresh_token_encrypted,
+          companyId: quickbooksTokens.metadata ? JSON.parse(quickbooksTokens.metadata).companyId : 'default',
+        };
+      }
+
+      const microsoftTokens = tokenMap.get('microsoft');
+      if (microsoftTokens) {
+        tokens.microsoft = {
+          accessToken: microsoftTokens.access_token_encrypted,
+          refreshToken: microsoftTokens.refresh_token_encrypted,
+        };
+      }
+
+      const procoreTokens = tokenMap.get('procore');
+      if (procoreTokens) {
+        tokens.procore = {
+          accessToken: procoreTokens.access_token_encrypted,
+          refreshToken: procoreTokens.refresh_token_encrypted,
+        };
+      }
+    } else {
+      // No tokens found at all
+      throw new IntegrationError(
+        'Google',
+        'No Google account connected. Please connect your Google account in Settings.',
+        { error: 'No tokens found for user', userId }
+      );
     }
 
-    if (asanaResult.status === 'fulfilled' && asanaResult.value.data) {
-      const asanaTokens = asanaResult.value.data as OAuthTokenRecord;
-      tokens.asana = {
-        accessToken: asanaTokens.access_token,
-        refreshToken: asanaTokens.refresh_token,
-      };
-    }
-
-    if (quickbooksResult.status === 'fulfilled' && quickbooksResult.value.data) {
-      const quickbooksTokens = quickbooksResult.value.data as OAuthTokenRecord;
-      tokens.quickbooks = {
-        accessToken: quickbooksTokens.access_token,
-        refreshToken: quickbooksTokens.refresh_token,
-        companyId: quickbooksTokens.metadata ? JSON.parse(quickbooksTokens.metadata).companyId : 'default',
-      };
-    }
-
-    if (microsoftResult.status === 'fulfilled' && microsoftResult.value.data) {
-      const microsoftTokens = microsoftResult.value.data as OAuthTokenRecord;
-      tokens.microsoft = {
-        accessToken: microsoftTokens.access_token,
-        refreshToken: microsoftTokens.refresh_token,
-      };
-    }
-
-    if (procoreResult.status === 'fulfilled' && procoreResult.value.data) {
-      const procoreTokens = procoreResult.value.data as OAuthTokenRecord;
-      tokens.procore = {
-        accessToken: procoreTokens.access_token,
-        refreshToken: procoreTokens.refresh_token,
-      };
-    }
-
-    logger.info('OAuth tokens fetched successfully', {
+    logger.info('OAuth tokens fetched successfully with optimized query', {
       providers: Object.keys(tokens),
       userId,
+      totalRecords: tokenRecords.length,
     });
 
     return { tokens, authUser: null }; // authUser will be set by caller

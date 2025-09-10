@@ -2,6 +2,44 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### Environment Setup
+
+1. Copy the environment template:
+```bash
+cp .env.example .env.local
+```
+
+2. Update `.env.local` with your actual Supabase and OAuth provider credentials:
+   - Replace `your-supabase-url` with your Supabase project URL
+   - Replace `your-supabase-anon-key` with your Supabase anon key
+   - Replace `your-*-client-id` and `your-*-client-secret` with your OAuth provider credentials
+
+### Supabase Setup
+
+For local development, you can use Supabase locally:
+
+1. Install Supabase CLI:
+```bash
+npm install -g supabase
+```
+
+2. Start Supabase locally:
+```bash
+supabase start
+```
+
+3. Run database migrations:
+```bash
+supabase db push
+```
+
+4. Seed the database:
+```bash
+npm run db:seed
+```
+
+### Development Server
+
 First, run the development server:
 
 ```bash

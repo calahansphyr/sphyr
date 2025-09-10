@@ -51,7 +51,22 @@ export default async function handler(
       ));
     }
 
-    const { query, userId = 'default-user', organizationId = 'default-org' } = validationResult.data;
+    const { query, userId, organizationId } = validationResult.data;
+
+    // Validate required fields - no default fallbacks for security
+    if (!userId || !organizationId) {
+      const validationError = new ValidationError(
+        'User ID and Organization ID are required for search operations',
+        'authentication',
+        { userId: !!userId, organizationId: !!organizationId }
+      );
+      await reportError(validationError, { endpoint: '/api/search', operation: 'validateCredentials' });
+      return res.status(400).json(createErrorResponse(
+        'User ID and Organization ID are required',
+        'MISSING_CREDENTIALS',
+        { userId: !!userId, organizationId: !!organizationId }
+      ));
+    }
 
     logger.info('Smart search query received', { 
       query, 
