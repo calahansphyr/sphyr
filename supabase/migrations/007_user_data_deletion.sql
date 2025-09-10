@@ -23,20 +23,61 @@ BEGIN
 
   -- Delete in dependency order to respect foreign key constraints
   -- Start with analytics and logs (no dependencies)
-  FOR table_name IN (
-    'product_analytics_events',
-    'search_analytics', 
-    'search_results',
-    'search_queries',
-    'oauth_token_refresh_logs',
-    'oauth_authorization_codes',
-    'integration_sync_logs'
-  ) LOOP
-    EXECUTE format('DELETE FROM %I WHERE user_id = $1', table_name) 
-    USING user_uuid;
+  
+  -- Delete from product_analytics_events if table exists
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'product_analytics_events') THEN
+    DELETE FROM product_analytics_events WHERE user_id = user_uuid;
     GET DIAGNOSTICS count = ROW_COUNT;
-    deleted_counts := deleted_counts || jsonb_build_object(table_name, count);
-  END LOOP;
+    deleted_counts := deleted_counts || jsonb_build_object('product_analytics_events', count);
+  END IF;
+
+  -- Delete from search_analytics if table exists
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'search_analytics') THEN
+    DELETE FROM search_analytics WHERE user_id = user_uuid;
+    GET DIAGNOSTICS count = ROW_COUNT;
+    deleted_counts := deleted_counts || jsonb_build_object('search_analytics', count);
+  END IF;
+
+  -- Delete from search_results if table exists
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'search_results') THEN
+    DELETE FROM search_results WHERE search_query_id IN (
+      SELECT id FROM search_queries WHERE user_id = user_uuid
+    );
+    GET DIAGNOSTICS count = ROW_COUNT;
+    deleted_counts := deleted_counts || jsonb_build_object('search_results', count);
+  END IF;
+
+  -- Delete from search_queries if table exists
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'search_queries') THEN
+    DELETE FROM search_queries WHERE user_id = user_uuid;
+    GET DIAGNOSTICS count = ROW_COUNT;
+    deleted_counts := deleted_counts || jsonb_build_object('search_queries', count);
+  END IF;
+
+  -- Delete from oauth_token_refresh_logs if table exists
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'oauth_token_refresh_logs') THEN
+    DELETE FROM oauth_token_refresh_logs WHERE oauth_token_id IN (
+      SELECT id FROM oauth_tokens WHERE user_id = user_uuid
+    );
+    GET DIAGNOSTICS count = ROW_COUNT;
+    deleted_counts := deleted_counts || jsonb_build_object('oauth_token_refresh_logs', count);
+  END IF;
+
+  -- Delete from oauth_authorization_codes if table exists
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'oauth_authorization_codes') THEN
+    DELETE FROM oauth_authorization_codes WHERE user_id = user_uuid;
+    GET DIAGNOSTICS count = ROW_COUNT;
+    deleted_counts := deleted_counts || jsonb_build_object('oauth_authorization_codes', count);
+  END IF;
+
+  -- Delete from integration_sync_logs if table exists
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'integration_sync_logs') THEN
+    DELETE FROM integration_sync_logs WHERE integration_id IN (
+      SELECT id FROM integrations WHERE user_id = user_uuid
+    );
+    GET DIAGNOSTICS count = ROW_COUNT;
+    deleted_counts := deleted_counts || jsonb_build_object('integration_sync_logs', count);
+  END IF;
 
   -- Delete OAuth tokens (references integrations)
   DELETE FROM oauth_tokens WHERE user_id = user_uuid;
@@ -90,45 +131,67 @@ BEGIN
     );
   END IF;
 
-  -- Count records in each table
-  SELECT COUNT(*) INTO count FROM product_analytics_events WHERE user_id = user_uuid;
-  summary := summary || jsonb_build_object('product_analytics_events', count);
+  -- Count records in each table (check if tables exist first)
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'product_analytics_events') THEN
+    SELECT COUNT(*) INTO count FROM product_analytics_events WHERE user_id = user_uuid;
+    summary := summary || jsonb_build_object('product_analytics_events', count);
+  END IF;
 
-  SELECT COUNT(*) INTO count FROM search_analytics WHERE user_id = user_uuid;
-  summary := summary || jsonb_build_object('search_analytics', count);
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'search_analytics') THEN
+    SELECT COUNT(*) INTO count FROM search_analytics WHERE user_id = user_uuid;
+    summary := summary || jsonb_build_object('search_analytics', count);
+  END IF;
 
-  SELECT COUNT(*) INTO count FROM search_results sr 
-  JOIN search_queries sq ON sr.search_query_id = sq.id 
-  WHERE sq.user_id = user_uuid;
-  summary := summary || jsonb_build_object('search_results', count);
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'search_results') THEN
+    SELECT COUNT(*) INTO count FROM search_results sr 
+    JOIN search_queries sq ON sr.search_query_id = sq.id 
+    WHERE sq.user_id = user_uuid;
+    summary := summary || jsonb_build_object('search_results', count);
+  END IF;
 
-  SELECT COUNT(*) INTO count FROM search_queries WHERE user_id = user_uuid;
-  summary := summary || jsonb_build_object('search_queries', count);
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'search_queries') THEN
+    SELECT COUNT(*) INTO count FROM search_queries WHERE user_id = user_uuid;
+    summary := summary || jsonb_build_object('search_queries', count);
+  END IF;
 
-  SELECT COUNT(*) INTO count FROM oauth_token_refresh_logs otrl
-  JOIN oauth_tokens ot ON otrl.oauth_token_id = ot.id
-  WHERE ot.user_id = user_uuid;
-  summary := summary || jsonb_build_object('oauth_token_refresh_logs', count);
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'oauth_token_refresh_logs') THEN
+    SELECT COUNT(*) INTO count FROM oauth_token_refresh_logs otrl
+    JOIN oauth_tokens ot ON otrl.oauth_token_id = ot.id
+    WHERE ot.user_id = user_uuid;
+    summary := summary || jsonb_build_object('oauth_token_refresh_logs', count);
+  END IF;
 
-  SELECT COUNT(*) INTO count FROM oauth_authorization_codes WHERE user_id = user_uuid;
-  summary := summary || jsonb_build_object('oauth_authorization_codes', count);
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'oauth_authorization_codes') THEN
+    SELECT COUNT(*) INTO count FROM oauth_authorization_codes WHERE user_id = user_uuid;
+    summary := summary || jsonb_build_object('oauth_authorization_codes', count);
+  END IF;
 
-  SELECT COUNT(*) INTO count FROM integration_sync_logs isl
-  JOIN integrations i ON isl.integration_id = i.id
-  WHERE i.user_id = user_uuid;
-  summary := summary || jsonb_build_object('integration_sync_logs', count);
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'integration_sync_logs') THEN
+    SELECT COUNT(*) INTO count FROM integration_sync_logs isl
+    JOIN integrations i ON isl.integration_id = i.id
+    WHERE i.user_id = user_uuid;
+    summary := summary || jsonb_build_object('integration_sync_logs', count);
+  END IF;
 
-  SELECT COUNT(*) INTO count FROM oauth_tokens WHERE user_id = user_uuid;
-  summary := summary || jsonb_build_object('oauth_tokens', count);
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'oauth_tokens') THEN
+    SELECT COUNT(*) INTO count FROM oauth_tokens WHERE user_id = user_uuid;
+    summary := summary || jsonb_build_object('oauth_tokens', count);
+  END IF;
 
-  SELECT COUNT(*) INTO count FROM integrations WHERE user_id = user_uuid;
-  summary := summary || jsonb_build_object('integrations', count);
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'integrations') THEN
+    SELECT COUNT(*) INTO count FROM integrations WHERE user_id = user_uuid;
+    summary := summary || jsonb_build_object('integrations', count);
+  END IF;
 
-  SELECT COUNT(*) INTO count FROM user_sessions WHERE user_id = user_uuid;
-  summary := summary || jsonb_build_object('user_sessions', count);
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_sessions') THEN
+    SELECT COUNT(*) INTO count FROM user_sessions WHERE user_id = user_uuid;
+    summary := summary || jsonb_build_object('user_sessions', count);
+  END IF;
 
-  SELECT COUNT(*) INTO count FROM user_roles WHERE user_id = user_uuid;
-  summary := summary || jsonb_build_object('user_roles', count);
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'user_roles') THEN
+    SELECT COUNT(*) INTO count FROM user_roles WHERE user_id = user_uuid;
+    summary := summary || jsonb_build_object('user_roles', count);
+  END IF;
 
   SELECT COUNT(*) INTO count FROM users WHERE id = user_uuid;
   summary := summary || jsonb_build_object('users', count);

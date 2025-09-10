@@ -40,11 +40,11 @@ export function createClient(req?: NextApiRequest, res?: NextApiResponse) {
   );
 }
 
-// For services that don't have access to request/response objects
+// For services that need admin access (uses service role key)
 export function createServiceClient() {
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!, // Use service role key for admin operations
     {
       cookies: {
         getAll() {
