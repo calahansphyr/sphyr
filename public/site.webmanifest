@@ -1,0 +1,32 @@
+{
+  "name": "Sphyr - AI-Powered Business Search",
+  "short_name": "Sphyr",
+  "description": "AI-powered search tool that connects to all your business applications, allowing you to find anything, anywhere.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3B82F6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/android-chrome-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/android-chrome-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icons/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ],
+  "categories": ["productivity", "business", "search"],
+  "lang": "en",
+  "dir": "ltr"
+}

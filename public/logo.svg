@@ -1,0 +1,22 @@
+<svg width="120" height="40" viewBox="0 0 120 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Sphyr Logo Design -->
+  <defs>
+    <linearGradient id="logoGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3B82F6;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1E40AF;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Search icon representing the core functionality -->
+  <circle cx="12" cy="12" r="8" fill="none" stroke="url(#logoGradient)" stroke-width="2"/>
+  <path d="M18 18L24 24" stroke="url(#logoGradient)" stroke-width="2" stroke-linecap="round"/>
+  
+  <!-- Connection dots representing integrations -->
+  <circle cx="32" cy="8" r="2" fill="url(#logoGradient)"/>
+  <circle cx="40" cy="16" r="2" fill="url(#logoGradient)"/>
+  <circle cx="36" cy="24" r="2" fill="url(#logoGradient)"/>
+  
+  <!-- Company name -->
+  <text x="50" y="16" font-family="system-ui, -apple-system, sans-serif" font-size="16" font-weight="700" fill="#1F2937">Sphyr</text>
+  <text x="50" y="28" font-family="system-ui, -apple-system, sans-serif" font-size="8" font-weight="400" fill="#6B7280">AI Search</text>
+</svg>

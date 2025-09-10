@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://sphyr.com/sitemap.xml
+
+# Disallow admin and API routes
+Disallow: /api/
+Disallow: /admin/
+Disallow: /_next/
+Disallow: /private/
+
+# Allow search engines to crawl the main pages
+Allow: /
+Allow: /search
+Allow: /integrations
+Allow: /dashboard

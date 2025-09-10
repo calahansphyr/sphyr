@@ -1,0 +1,870 @@
+/**
+ * Smart Search API Endpoint
+ * Handles search queries with AI processing and real integration data
+ */
+
+import type { NextApiRequest, NextApiResponse } from 'next';
+import { CerebrasClient } from '@/lib/ai/cerebras-client';
+import { AdapterFactory } from '@/lib/integrations/adapter-factory';
+import { reportError } from '@/lib/monitoring';
+import { IntegrationError, ValidationError, AuthenticationError } from '@/lib/errors';
+import { createClient } from '@/lib/supabase/server';
+import { SearchRequestSchema, createErrorResponse } from '@/lib/schemas';
+import { logger, generateRequestId } from '@/lib/logger';
+import { executeWithResilience, DEFAULT_TIMEOUT_CONFIG, DEFAULT_RETRY_CONFIG } from '@/lib/resilience';
+import { searchOrchestrator } from '@/lib/search/search-orchestrator';
+import { productAnalytics } from '@/lib/analytics';
+import type { AISearchResult, RankedSearchResult } from '@/types/ai';
+import type { GmailMessage, GoogleDriveFile, GoogleCalendarEvent, AsanaTask, QuickBooksCustomer, QuickBooksInvoice, QuickBooksItem, QuickBooksPayment, OutlookMessage, OneDriveFile, OutlookCalendarEvent, WordDocument, ExcelWorkbook, ProcoreDocument, ProcoreRfi } from '@/types/integrations';
+import type { GoogleContact } from '@/lib/integrations/google/google-people-adapter';
+import type { SlackMessage } from '@/types/integrations';
+
+interface SmartSearchResponse {
+  message: string;
+  data: RankedSearchResult[];
+  query: string;
+  processedQuery: string;
+  intent: {
+    type: string;
+    category: string;
+    confidence: number;
+  };
+  rankingExplanation: string;
+  executionTime: number;
+  timestamp: string;
+}
+
+/**
+ * Format file size in human-readable format
+ */
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
+
+// Helper methods for extracting results from SearchOrchestrator format
+function extractGoogleResults(googleResults: any[]) {
+  const serviceNames = ['gmail', 'drive', 'calendar', 'docs', 'sheets', 'people'];
+  const fallbackResults = [
+    { messages: [] },
+    { files: [] },
+    { events: [] },
+    { documents: [] },
+    { spreadsheets: [] },
+    { contacts: [] }
+  ];
+  
+  return serviceNames.map(service => {
+    const result = googleResults.find(r => r.service === service);
+    return result ? result.data : fallbackResults[serviceNames.indexOf(service)];
+  });
+}
+
+function extractQuickBooksResults(quickbooksResults: any[]) {
+  const serviceNames = ['customers', 'invoices', 'items', 'payments'];
+  const result: any = { customers: [], invoices: [], items: [], payments: [] };
+  
+  serviceNames.forEach(service => {
+    const searchResult = quickbooksResults.find(r => r.service === service);
+    if (searchResult) {
+      result[service] = searchResult.data[service] || [];
+    }
+  });
+  
+  return result;
+}
+
+function extractMicrosoftResults(microsoftResults: any[]) {
+  return microsoftResults;
+}
+
+function extractProcoreResults(procoreResults: any[]) {
+  return procoreResults;
+}
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<SmartSearchResponse | { error: string }>
+) {
+  const startTime = Date.now();
+  const requestId = generateRequestId();
+  
+  // Set up structured logging context
+  logger.setRequestId(requestId);
+  logger.logRequestStart(req.method || 'UNKNOWN', req.url || '/api/search');
+
+  if (req.method !== 'POST') {
+    res.setHeader('Allow', ['POST']);
+    logger.warn('Invalid HTTP method', { method: req.method, allowedMethods: ['POST'] });
+    return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
+  }
+
+  try {
+    // Validate input using Zod schema
+    const validationResult = SearchRequestSchema.safeParse(req.body);
+    if (!validationResult.success) {
+      const validationError = new ValidationError(
+        'Invalid request data',
+        'requestBody',
+        req.body,
+        { validationErrors: validationResult.error.issues }
+      );
+      await reportError(validationError, { endpoint: '/api/search', operation: 'validateInput' });
+      return res.status(400).json(createErrorResponse(
+        'Invalid request data',
+        'VALIDATION_ERROR',
+        validationResult.error.issues
+      ));
+    }
+
+    const { query, userId = 'default-user', organizationId = 'default-org' } = validationResult.data;
+
+    logger.info('Smart search query received', { 
+      query, 
+      userId, 
+      organizationId,
+      requestId 
+    });
+
+    // Initialize AI and integration clients
+    const cerebrasClient = new CerebrasClient();
+    
+    // Get user's OAuth tokens from Supabase
+    const supabase = await createClient();
+    const { data: { user: authUser }, error: userError } = await supabase.auth.getUser();
+    
+    if (userError || !authUser) {
+      const authError = new AuthenticationError(
+        'User must be authenticated to perform search',
+        { userError: userError?.message }
+      );
+      await reportError(authError, { endpoint: '/api/search', operation: 'getUser' });
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Fetch user's Google OAuth tokens
+    const { data: oauthTokens, error: tokenError } = await supabase
+      .from('oauth_tokens')
+      .select('*')
+      .eq('user_id', authUser.id)
+      .eq('provider', 'google')
+      .single();
+
+    if (tokenError || !oauthTokens) {
+      const integrationError = new IntegrationError(
+        'Google',
+        'No Google account connected. Please connect your Google account in Settings.',
+        { tokenError: tokenError?.message }
+      );
+      await reportError(integrationError, { endpoint: '/api/search', operation: 'getOAuthTokens' });
+      return res.status(400).json({ 
+        error: 'Google account not connected. Please connect your Google account first.' 
+      });
+    }
+
+    // Check if token is expired and needs refresh
+    const isTokenExpired = oauthTokens.expires_at && new Date(oauthTokens.expires_at) <= new Date();
+    
+    if (isTokenExpired && !oauthTokens.refresh_token) {
+      const integrationError = new IntegrationError(
+        'Google',
+        'Google access token expired and no refresh token available',
+        { expiresAt: oauthTokens.expires_at }
+      );
+      await reportError(integrationError, { endpoint: '/api/search', operation: 'checkTokenExpiry' });
+      return res.status(400).json({ 
+        error: 'Google account session expired. Please reconnect your Google account.' 
+      });
+    }
+
+    // Create adapters using the factory
+    const googleTokens = {
+      accessToken: oauthTokens.access_token,
+      refreshToken: oauthTokens.refresh_token,
+    };
+
+    // Get Slack tokens if available
+    const { data: slackTokens } = await supabase
+      .from('oauth_tokens')
+      .select('*')
+      .eq('user_id', authUser.id)
+      .eq('provider', 'slack')
+      .single();
+
+    const slackTokensForFactory = slackTokens ? {
+      accessToken: slackTokens.access_token,
+      refreshToken: slackTokens.refresh_token,
+    } : undefined;
+
+    // Get Asana tokens if available
+    const { data: asanaTokens } = await supabase
+      .from('oauth_tokens')
+      .select('*')
+      .eq('user_id', authUser.id)
+      .eq('provider', 'asana')
+      .single();
+
+    const asanaTokensForFactory = asanaTokens ? {
+      accessToken: asanaTokens.access_token,
+      refreshToken: asanaTokens.refresh_token,
+    } : undefined;
+
+    // Get QuickBooks tokens if available
+    const { data: quickbooksTokens } = await supabase
+      .from('oauth_tokens')
+      .select('*')
+      .eq('user_id', authUser.id)
+      .eq('provider', 'quickbooks')
+      .single();
+
+    const quickbooksTokensForFactory = quickbooksTokens ? {
+      accessToken: quickbooksTokens.access_token,
+      refreshToken: quickbooksTokens.refresh_token,
+      companyId: quickbooksTokens.metadata ? JSON.parse(quickbooksTokens.metadata).companyId : 'default',
+    } : undefined;
+
+    // Get Microsoft tokens if available
+    const { data: microsoftTokens } = await supabase
+      .from('oauth_tokens')
+      .select('*')
+      .eq('user_id', authUser.id)
+      .eq('provider', 'microsoft')
+      .single();
+
+    const microsoftTokensForFactory = microsoftTokens ? {
+      accessToken: microsoftTokens.access_token,
+      refreshToken: microsoftTokens.refresh_token,
+    } : undefined;
+
+    // Fetch Procore OAuth tokens from Supabase
+    const { data: procoreTokens } = await supabase
+      .from('oauth_tokens')
+      .select('*')
+      .eq('user_id', authUser.id)
+      .eq('provider', 'procore')
+      .single();
+
+    const procoreTokensForFactory = procoreTokens ? {
+      accessToken: procoreTokens.access_token,
+      refreshToken: procoreTokens.refresh_token,
+    } : undefined;
+
+    // Create all adapters using the factory
+    const adapters = AdapterFactory.createAdaptersFromEnv(googleTokens, slackTokensForFactory, asanaTokensForFactory, quickbooksTokensForFactory, microsoftTokensForFactory, procoreTokensForFactory);
+
+    // Step 1: Process the query with AI to understand intent
+    const queryProcessingRequest = {
+      originalQuery: query.trim(),
+      context: {
+        userHistory: [], // In production, fetch from user's search history
+        organizationData: { organizationId },
+        recentSearches: [], // In production, fetch recent searches
+        activeIntegrations: AdapterFactory.getAvailableAdapters(adapters),
+      },
+      userId,
+      organizationId,
+    };
+
+    const queryProcessing = await cerebrasClient.processQuery(queryProcessingRequest);
+    logger.info('Query processed successfully', { 
+      originalQuery: query,
+      processedQuery: queryProcessing.processedQuery,
+      intent: queryProcessing.intent,
+      requestId 
+    });
+
+    // Step 2: Execute searches using SearchOrchestrator
+    const searchResults = await searchOrchestrator.executeAllSearches(
+      adapters,
+      queryProcessing.processedQuery || query.trim(),
+      requestId
+    );
+
+    // Step 3: Transform results to AI format
+    const aiSearchResults: AISearchResult[] = [];
+
+    // Process successful results
+    const successfulResults = searchResults.filter(result => result.success);
+
+    // Transform Google results
+    const googleResults = successfulResults.filter(r => r.integration === 'google');
+    const [
+      gmailResults,
+      driveResults,
+      calendarResults,
+      docsResults,
+      sheetsResults,
+      peopleResults,
+    ] = extractGoogleResults(googleResults);
+
+    // Transform other integration results
+    const slackResults = successfulResults.find(r => r.integration === 'slack');
+    const asanaResults = successfulResults.find(r => r.integration === 'asana');
+    const quickbooksResults = extractQuickBooksResults(successfulResults.filter(r => r.integration === 'quickbooks'));
+    const microsoftResults = extractMicrosoftResults(successfulResults.filter(r => r.integration === 'microsoft'));
+    const procoreResults = extractProcoreResults(successfulResults.filter(r => r.integration === 'procore'));
+
+    // Extract individual Microsoft results
+    const microsoftOutlookResults = microsoftResults.find(r => r.service === 'outlook')?.data || { messages: [] };
+    const microsoftOneDriveResults = microsoftResults.find(r => r.service === 'onedrive')?.data || { files: [] };
+    const microsoftCalendarResults = microsoftResults.find(r => r.service === 'calendar')?.data || { events: [] };
+    const microsoftWordResults = microsoftResults.find(r => r.service === 'word')?.data || { documents: [] };
+    const microsoftExcelResults = microsoftResults.find(r => r.service === 'excel')?.data || { workbooks: [] };
+
+    // Extract individual Procore results
+    const procoreDocumentResults = procoreResults.find(r => r.service === 'documents')?.data || { documents: [] };
+    const procoreRfiResults = procoreResults.find(r => r.service === 'rfis')?.data || { rfis: [] };
+
+    // Step 3: Convert results to AI search results format
+    const gmailSearchResults: AISearchResult[] = (gmailResults as any).messages.map((message: GmailMessage) => ({
+      id: `gmail-${message.id}`,
+      title: message.subject || 'No Subject',
+      content: message.snippet || message.body.substring(0, 500),
+      source: 'Gmail',
+      integrationType: 'google_gmail',
+      metadata: {
+        messageId: message.id,
+        threadId: message.threadId,
+        from: message.from,
+        to: message.to,
+        date: message.date,
+        labels: message.labels,
+        sizeEstimate: message.sizeEstimate,
+      },
+      url: `https://mail.google.com/mail/u/0/#inbox/${message.threadId}`,
+      createdAt: message.date,
+    }));
+
+    const driveSearchResults: AISearchResult[] = (driveResults as any).files.map((file: GoogleDriveFile) => ({
+      id: `drive-${file.id}`,
+      title: file.name,
+      content: `File type: ${file.mimeType}${file.size ? ` (${Math.round(file.size / 1024)}KB)` : ''}`,
+      source: 'Google Drive',
+      integrationType: 'google_drive',
+      metadata: {
+        fileId: file.id,
+        mimeType: file.mimeType,
+        size: file.size,
+        owners: file.owners,
+        shared: file.shared,
+        parents: file.parents,
+      },
+      url: file.webViewLink || `https://drive.google.com/file/d/${file.id}/view`,
+      createdAt: file.createdTime,
+    }));
+
+    const calendarSearchResults: AISearchResult[] = (calendarResults as any).events.map((event: GoogleCalendarEvent) => ({
+      id: `calendar-${event.id}`,
+      title: event.summary,
+      content: `${event.description || 'No description'}${event.location ? ` | Location: ${event.location}` : ''}`,
+      source: 'Google Calendar',
+      integrationType: 'google_calendar',
+      metadata: {
+        eventId: event.id,
+        start: event.start,
+        end: event.end,
+        attendees: event.attendees,
+        location: event.location,
+        status: event.status,
+      },
+      url: `https://calendar.google.com/calendar/event?eid=${event.id}`,
+      createdAt: event.created,
+    }));
+
+    const docsSearchResults: AISearchResult[] = (docsResults as any).documents.map((doc: GoogleDriveFile) => ({
+      id: `docs-${doc.id}`,
+      title: doc.name,
+      content: `Google Doc - Last modified: ${new Date(doc.modifiedTime).toLocaleDateString()}`,
+      source: 'Google Docs',
+      integrationType: 'google_docs',
+      metadata: {
+        documentId: doc.id,
+        mimeType: doc.mimeType,
+        size: doc.size,
+        owners: doc.owners,
+        shared: doc.shared,
+        parents: doc.parents,
+      },
+      url: doc.webViewLink || `https://docs.google.com/document/d/${doc.id}/edit`,
+      createdAt: doc.createdTime,
+    }));
+
+    const sheetsSearchResults: AISearchResult[] = (sheetsResults as any).spreadsheets.map((sheet: GoogleDriveFile) => ({
+      id: `sheets-${sheet.id}`,
+      title: sheet.name,
+      content: `Google Sheet - Last modified: ${new Date(sheet.modifiedTime).toLocaleDateString()}`,
+      source: 'Google Sheets',
+      integrationType: 'google_sheets',
+      metadata: {
+        spreadsheetId: sheet.id,
+        mimeType: sheet.mimeType,
+        size: sheet.size,
+        owners: sheet.owners,
+        shared: sheet.shared,
+        parents: sheet.parents,
+      },
+      url: sheet.webViewLink || `https://docs.google.com/spreadsheets/d/${sheet.id}/edit`,
+      createdAt: sheet.createdTime,
+    }));
+
+    const peopleSearchResults: AISearchResult[] = (peopleResults as any).contacts.map((contact: GoogleContact) => ({
+      id: `people-${contact.id}`,
+      title: contact.name,
+      content: `${contact.email ? `Email: ${contact.email}` : ''}${contact.phone ? ` | Phone: ${contact.phone}` : ''}${contact.organization ? ` | ${contact.organization}` : ''}${contact.jobTitle ? ` - ${contact.jobTitle}` : ''}`,
+      source: 'Google People',
+      integrationType: 'google_people',
+      metadata: {
+        contactId: contact.id,
+        email: contact.email,
+        phone: contact.phone,
+        organization: contact.organization,
+        jobTitle: contact.jobTitle,
+        photoUrl: contact.photoUrl,
+        resourceName: contact.resourceName,
+      },
+      url: `https://contacts.google.com/person/${contact.id}`,
+      createdAt: new Date().toISOString(), // People API doesn't provide creation date
+    }));
+
+    const slackSearchResults: AISearchResult[] = slackResults.messages.map((message: SlackMessage) => ({
+      id: `slack-${message.id}`,
+      title: `Message in #${message.channelId}`,
+      content: message.text,
+      source: 'Slack',
+      integrationType: 'slack',
+      metadata: {
+        messageId: message.id,
+        channel: message.channelId,
+        user: message.user,
+        timestamp: message.timestamp,
+        threadTs: message.threadTs,
+        attachments: message.attachments,
+      },
+      createdAt: new Date(parseFloat(message.timestamp) * 1000).toISOString(),
+    }));
+
+    const asanaSearchResults: AISearchResult[] = asanaResults.tasks.map((task: AsanaTask) => ({
+      id: `asana-${task.id}`,
+      title: task.name,
+      content: task.notes || 'No description',
+      source: 'Asana',
+      integrationType: 'asana',
+      metadata: {
+        taskId: task.id,
+        completed: task.completed,
+        dueOn: task.dueOn,
+        assignee: task.assignee,
+        projects: task.projects,
+        tags: task.tags,
+        createdAt: task.createdAt,
+        modifiedAt: task.modifiedAt,
+      },
+      url: `https://app.asana.com/0/0/${task.id}`, // Asana task URL format
+      createdAt: task.createdAt,
+    }));
+
+    // Convert QuickBooks results to AI search results format
+    const quickbooksCustomerResults: AISearchResult[] = quickbooksResults.customers.map((customer: QuickBooksCustomer) => ({
+      id: `quickbooks-customer-${customer.id}`,
+      title: customer.name,
+      content: `${customer.companyName ? `Company: ${customer.companyName}` : ''}${customer.email ? ` | Email: ${customer.email}` : ''}${customer.phone ? ` | Phone: ${customer.phone}` : ''}${customer.balance ? ` | Balance: $${customer.balance}` : ''}`,
+      source: 'QuickBooks',
+      integrationType: 'quickbooks',
+      metadata: {
+        customerId: customer.id,
+        companyName: customer.companyName,
+        email: customer.email,
+        phone: customer.phone,
+        balance: customer.balance,
+        billingAddress: customer.billingAddress,
+        createdAt: customer.createdAt,
+        updatedAt: customer.updatedAt,
+      },
+      url: `https://app.qbo.intuit.com/app/customerdetail?nameId=${customer.id}`,
+      createdAt: customer.createdAt,
+    }));
+
+    const quickbooksInvoiceResults: AISearchResult[] = quickbooksResults.invoices.map((invoice: QuickBooksInvoice) => ({
+      id: `quickbooks-invoice-${invoice.id}`,
+      title: `Invoice ${invoice.docNumber}`,
+      content: `Customer: ${invoice.customerName} | Amount: $${invoice.totalAmount}${invoice.balance ? ` | Balance: $${invoice.balance}` : ''}${invoice.dueDate ? ` | Due: ${invoice.dueDate}` : ''}`,
+      source: 'QuickBooks',
+      integrationType: 'quickbooks',
+      metadata: {
+        invoiceId: invoice.id,
+        docNumber: invoice.docNumber,
+        customerId: invoice.customerId,
+        customerName: invoice.customerName,
+        totalAmount: invoice.totalAmount,
+        balance: invoice.balance,
+        dueDate: invoice.dueDate,
+        status: invoice.status,
+        lineItems: invoice.lineItems,
+        createdAt: invoice.createdAt,
+        updatedAt: invoice.updatedAt,
+      },
+      url: `https://app.qbo.intuit.com/app/invoice?txnId=${invoice.id}`,
+      createdAt: invoice.createdAt,
+    }));
+
+    const quickbooksItemResults: AISearchResult[] = quickbooksResults.items.map((item: QuickBooksItem) => ({
+      id: `quickbooks-item-${item.id}`,
+      title: item.name,
+      content: `${item.description || ''}${item.sku ? ` | SKU: ${item.sku}` : ''} | Type: ${item.type} | Price: $${item.unitPrice}`,
+      source: 'QuickBooks',
+      integrationType: 'quickbooks',
+      metadata: {
+        itemId: item.id,
+        sku: item.sku,
+        description: item.description,
+        type: item.type,
+        unitPrice: item.unitPrice,
+        taxable: item.taxable,
+        active: item.active,
+        createdAt: item.createdAt,
+        updatedAt: item.updatedAt,
+      },
+      url: `https://app.qbo.intuit.com/app/item?txnId=${item.id}`,
+      createdAt: item.createdAt,
+    }));
+
+    const quickbooksPaymentResults: AISearchResult[] = quickbooksResults.payments.map((payment: QuickBooksPayment) => ({
+      id: `quickbooks-payment-${payment.id}`,
+      title: `Payment from ${payment.customerName}`,
+      content: `Amount: $${payment.totalAmount} | Method: ${payment.paymentMethod} | Type: ${payment.paymentType}`,
+      source: 'QuickBooks',
+      integrationType: 'quickbooks',
+      metadata: {
+        paymentId: payment.id,
+        customerId: payment.customerId,
+        customerName: payment.customerName,
+        totalAmount: payment.totalAmount,
+        paymentMethod: payment.paymentMethod,
+        paymentType: payment.paymentType,
+        lineItems: payment.lineItems,
+        createdAt: payment.createdAt,
+        updatedAt: payment.updatedAt,
+      },
+      url: `https://app.qbo.intuit.com/app/payment?txnId=${payment.id}`,
+      createdAt: payment.createdAt,
+    }));
+
+    // Convert Microsoft Outlook results to AI search results format
+    const microsoftOutlookSearchResults: AISearchResult[] = microsoftOutlookResults.messages.map((message: OutlookMessage) => ({
+      id: `outlook-${message.id}`,
+      title: message.subject || 'No Subject',
+      content: message.bodyPreview || message.body.substring(0, 500),
+      source: 'Microsoft Outlook',
+      integrationType: 'microsoft_outlook',
+      metadata: {
+        messageId: message.id,
+        from: message.from,
+        to: message.to,
+        cc: message.cc,
+        bcc: message.bcc,
+        receivedDateTime: message.receivedDateTime,
+        importance: message.importance,
+        isRead: message.isRead,
+        isDraft: message.isDraft,
+        hasAttachments: message.hasAttachments,
+        conversationId: message.conversationId,
+        internetMessageId: message.internetMessageId,
+      },
+      url: `https://outlook.office.com/mail/deeplink/read/${message.id}`,
+      createdAt: message.receivedDateTime,
+    }));
+
+    // Convert Microsoft OneDrive results to AI search results format
+    const microsoftOneDriveSearchResults: AISearchResult[] = microsoftOneDriveResults.files.map((file: OneDriveFile) => ({
+      id: `onedrive-${file.id}`,
+      title: file.name,
+      content: `${file.fileType} file | Size: ${formatFileSize(file.size)} | Modified: ${new Date(file.lastModifiedDateTime).toLocaleDateString()}`,
+      source: 'Microsoft OneDrive',
+      integrationType: 'microsoft_onedrive',
+      metadata: {
+        fileId: file.id,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.fileType,
+        mimeType: file.mimeType,
+        createdDateTime: file.createdDateTime,
+        lastModifiedDateTime: file.lastModifiedDateTime,
+        createdBy: file.createdBy,
+        lastModifiedBy: file.lastModifiedBy,
+        isFolder: file.isFolder,
+        parentFolderId: file.parentFolderId,
+        shared: file.shared,
+      },
+      url: file.webUrl,
+      createdAt: file.lastModifiedDateTime,
+    }));
+
+    // Convert Microsoft Calendar results to AI search results format
+    const microsoftCalendarSearchResults: AISearchResult[] = microsoftCalendarResults.events.map((event: OutlookCalendarEvent) => ({
+      id: `calendar-${event.id}`,
+      title: event.subject,
+      content: `${event.isAllDay ? 'All Day' : `${new Date(event.start.dateTime).toLocaleTimeString()} - ${new Date(event.end.dateTime).toLocaleTimeString()}`} | ${event.location?.displayName || 'No Location'} | ${event.attendees.length} attendees`,
+      source: 'Microsoft Calendar',
+      integrationType: 'microsoft_calendar',
+      metadata: {
+        eventId: event.id,
+        subject: event.subject,
+        start: event.start,
+        end: event.end,
+        location: event.location,
+        attendees: event.attendees,
+        organizer: event.organizer,
+        bodyPreview: event.bodyPreview,
+        isAllDay: event.isAllDay,
+        isCancelled: event.isCancelled,
+        isOnlineMeeting: event.isOnlineMeeting,
+        onlineMeetingProvider: event.onlineMeetingProvider,
+        onlineMeetingUrl: event.onlineMeetingUrl,
+        seriesMasterId: event.seriesMasterId,
+        recurrence: event.recurrence,
+      },
+      url: `https://outlook.office.com/calendar/deeplink/read/${event.id}`,
+      createdAt: event.start.dateTime,
+    }));
+
+    // Convert Microsoft Word results to AI search results format
+    const microsoftWordSearchResults: AISearchResult[] = microsoftWordResults.documents.map((document: WordDocument) => ({
+      id: `word-${document.id}`,
+      title: document.name,
+      content: `Word Document | Size: ${formatFileSize(document.size)} | Modified: ${new Date(document.lastModifiedDateTime).toLocaleDateString()}`,
+      source: 'Microsoft Word',
+      integrationType: 'microsoft_word',
+      metadata: {
+        documentId: document.id,
+        fileName: document.name,
+        fileSize: document.size,
+        createdDateTime: document.createdDateTime,
+        lastModifiedDateTime: document.lastModifiedDateTime,
+        createdBy: document.createdBy,
+        lastModifiedBy: document.lastModifiedBy,
+        shared: document.shared,
+        content: document.content,
+        wordCount: document.wordCount,
+        pageCount: document.pageCount,
+      },
+      url: document.webUrl,
+      createdAt: document.lastModifiedDateTime,
+    }));
+
+    // Convert Microsoft Excel results to AI search results format
+    const microsoftExcelSearchResults: AISearchResult[] = microsoftExcelResults.workbooks.map((workbook: ExcelWorkbook) => ({
+      id: `excel-${workbook.id}`,
+      title: workbook.name,
+      content: `Excel Workbook | Size: ${formatFileSize(workbook.size)} | Modified: ${new Date(workbook.lastModifiedDateTime).toLocaleDateString()}`,
+      source: 'Microsoft Excel',
+      integrationType: 'microsoft_excel',
+      metadata: {
+        workbookId: workbook.id,
+        fileName: workbook.name,
+        fileSize: workbook.size,
+        createdDateTime: workbook.createdDateTime,
+        lastModifiedDateTime: workbook.lastModifiedDateTime,
+        createdBy: workbook.createdBy,
+        lastModifiedBy: workbook.lastModifiedBy,
+        shared: workbook.shared,
+        worksheets: workbook.worksheets,
+      },
+      url: workbook.webUrl,
+      createdAt: workbook.lastModifiedDateTime,
+    }));
+
+    // Convert Procore document results to AI search results format
+    const procoreDocumentSearchResults: AISearchResult[] = procoreDocumentResults.documents.map((document: ProcoreDocument) => ({
+      id: `procore-doc-${document.id}`,
+      title: document.title,
+      content: `${document.file_name} | Project: ${document.project.name} | Size: ${formatFileSize(document.file_size)} | Uploaded: ${new Date(document.created_at).toLocaleDateString()}`,
+      source: 'Procore',
+      integrationType: 'procore',
+      metadata: {
+        documentId: document.id,
+        title: document.title,
+        fileName: document.file_name,
+        fileSize: document.file_size,
+        contentType: document.content_type,
+        createdDateTime: document.created_at,
+        updatedDateTime: document.updated_at,
+        uploadedBy: document.uploaded_by,
+        project: document.project,
+        folder: document.folder,
+        isPrivate: document.is_private,
+        tags: document.tags,
+      },
+      url: document.url,
+      createdAt: document.created_at,
+    }));
+
+    // Convert Procore RFI results to AI search results format
+    const procoreRfiSearchResults: AISearchResult[] = procoreRfiResults.rfis.map((rfi: ProcoreRfi) => ({
+      id: `procore-rfi-${rfi.id}`,
+      title: rfi.subject,
+      content: `RFI #${rfi.number} | Status: ${rfi.status} | Priority: ${rfi.priority} | Project: ${rfi.project.name} | Created: ${new Date(rfi.created_at).toLocaleDateString()}`,
+      source: 'Procore',
+      integrationType: 'procore',
+      metadata: {
+        rfiId: rfi.id,
+        number: rfi.number,
+        subject: rfi.subject,
+        question: rfi.question,
+        answer: rfi.answer,
+        status: rfi.status,
+        priority: rfi.priority,
+        createdDateTime: rfi.created_at,
+        updatedDateTime: rfi.updated_at,
+        dueDate: rfi.due_date,
+        answeredAt: rfi.answered_at,
+        createdBy: rfi.created_by,
+        assignedTo: rfi.assigned_to,
+        project: rfi.project,
+        trade: rfi.trade,
+        location: rfi.location,
+        attachments: rfi.attachments,
+      },
+      url: `https://app.procore.com/projects/${rfi.project.id}/rfis/${rfi.id}`,
+      createdAt: rfi.created_at,
+    }));
+
+    // Combine all search results
+    const aiSearchResults: AISearchResult[] = [
+      ...gmailSearchResults,
+      ...driveSearchResults,
+      ...calendarSearchResults,
+      ...docsSearchResults,
+      ...sheetsSearchResults,
+      ...peopleSearchResults,
+      ...slackSearchResults,
+      ...asanaSearchResults,
+      ...quickbooksCustomerResults,
+      ...quickbooksInvoiceResults,
+      ...quickbooksItemResults,
+      ...quickbooksPaymentResults,
+      ...microsoftOutlookSearchResults,
+      ...microsoftOneDriveSearchResults,
+      ...microsoftCalendarSearchResults,
+      ...microsoftWordSearchResults,
+      ...microsoftExcelSearchResults,
+      ...procoreDocumentSearchResults,
+      ...procoreRfiSearchResults,
+    ];
+
+    // Step 4: Rank results using AI
+    const rankingRequest = {
+      query: query.trim(),
+      results: aiSearchResults,
+      context: queryProcessingRequest.context,
+    };
+
+    const rankingResponse = await cerebrasClient.rankResults(rankingRequest);
+    logger.info('Results ranked successfully', { 
+      totalResults: aiSearchResults.length,
+      rankedResults: rankingResponse.rankedResults.length,
+      requestId 
+    });
+
+    const executionTime = Date.now() - startTime;
+
+    // Step 5: Return smart search response
+    const response: SmartSearchResponse = {
+      message: 'Smart search completed successfully',
+      data: rankingResponse.rankedResults,
+      query: query.trim(),
+      processedQuery: queryProcessing.processedQuery,
+      intent: {
+        type: queryProcessing.intent.type,
+        category: queryProcessing.intent.category,
+        confidence: queryProcessing.intent.confidence,
+      },
+      rankingExplanation: rankingResponse.rankingExplanation,
+      executionTime,
+      timestamp: new Date().toISOString(),
+    };
+
+    logger.logRequestEnd(req.method || 'POST', req.url || '/api/search', 200, executionTime, {
+      totalResults: aiSearchResults.length,
+      rankedResults: rankingResponse.rankedResults.length,
+      requestId
+    });
+
+    // Track search performed event
+    try {
+      await productAnalytics.trackSearchPerformed(
+        userId,
+        organizationId,
+        query,
+        rankingResponse.rankedResults.length,
+        {
+          processed_query: queryProcessing.processedQuery,
+          intent_type: queryProcessing.intent.type,
+          intent_confidence: queryProcessing.intent.confidence,
+          execution_time: executionTime,
+          integrations_used: AdapterFactory.getAvailableAdapters(adapters),
+        }
+      );
+    } catch (analyticsError) {
+      logger.warn('Failed to track search analytics', {
+        error: (analyticsError as Error).message,
+        requestId,
+      });
+    }
+
+    res.status(200).json(response);
+
+  } catch (error) {
+    const executionTime = Date.now() - startTime;
+    logger.error('Smart search API error', error as Error, {
+      endpoint: '/api/search',
+      operation: 'smartSearch',
+      executionTime,
+      requestId
+    });
+
+    // Report error to monitoring service
+    await reportError(error as Error, {
+      endpoint: '/api/search',
+      operation: 'smartSearch',
+      executionTime,
+      requestId,
+    });
+
+    // Return appropriate error response
+    if (error instanceof IntegrationError) {
+      logger.logRequestEnd(req.method || 'POST', req.url || '/api/search', 502, executionTime, {
+        errorType: 'INTEGRATION_ERROR',
+        requestId
+      });
+      return res.status(502).json(createErrorResponse(
+        `Integration error: ${error.getUserMessage()}`,
+        'INTEGRATION_ERROR'
+      ));
+    }
+
+    if (error instanceof ValidationError) {
+      logger.logRequestEnd(req.method || 'POST', req.url || '/api/search', 400, executionTime, {
+        errorType: 'VALIDATION_ERROR',
+        requestId
+      });
+      return res.status(400).json(createErrorResponse(
+        error.getUserMessage(),
+        'VALIDATION_ERROR'
+      ));
+    }
+
+    logger.logRequestEnd(req.method || 'POST', req.url || '/api/search', 500, executionTime, {
+      errorType: 'INTERNAL_SERVER_ERROR',
+      requestId
+    });
+    res.status(500).json(createErrorResponse(
+      'An unexpected error occurred during smart search. Please try again.',
+      'INTERNAL_SERVER_ERROR'
+    ));
+  }
+}

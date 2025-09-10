@@ -6,22 +6,47 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "db:reset": "supabase db reset",
+    "db:reset:local": "supabase db reset --local",
+    "db:seed": "supabase db seed",
+    "db:seed:local": "supabase db seed --local",
+    "db:setup": "supabase db reset --local && supabase db seed --local",
+    "db:migrate": "supabase db push",
+    "db:migrate:local": "supabase db push --local",
+    "db:verify": "supabase db diff --local",
+    "test:db": "npm run db:setup && npm run test:e2e"
   },
   "dependencies": {
+    "@azure/msal-node": "^3.7.3",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
+    "@procore/js-sdk": "^4.3.0",
+    "@sentry/nextjs": "^10.10.0",
+    "@slack/web-api": "^7.10.0",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.57.2",
+    "@tanstack/react-query": "^5.87.1",
+    "@tanstack/react-query-devtools": "^5.87.3",
+    "asana": "^3.1.1",
+    "axios": "^1.11.0",
+    "googleapis": "^159.0.0",
+    "next": "15.5.2",
+    "node-quickbooks": "^2.0.46",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.2"
+    "zod": "^4.1.5"
   },
   "devDependencies": {
-    "typescript": "^5",
+    "@eslint/eslintrc": "^3",
+    "@tailwindcss/postcss": "^4",
+    "@types/asana": "^0.18.16",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
     "eslint": "^9",
     "eslint-config-next": "15.5.2",
-    "@eslint/eslintrc": "^3"
+    "playwright": "^1.55.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
   }
 }
