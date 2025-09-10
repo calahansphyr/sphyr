@@ -4,6 +4,7 @@
  */
 
 import { aiConfig } from '../../config/ai';
+import { logger } from '../logger';
 import type { 
   CerebrasRequest, 
   CerebrasResponse, 
@@ -190,7 +191,11 @@ Consider factors like:
         confidence: parsed.confidence || 0.5
       };
     } catch (error) {
-      console.error('Error parsing query processing response:', error);
+      logger.error('Failed to parse query processing response', error, {
+        operation: 'parse_query_processing_response',
+        service: 'cerebras-client',
+        query: request.query
+      });
       return {
         processedQuery: '',
         intent: { type: 'search', category: 'general', confidence: 0.5 },
@@ -216,7 +221,10 @@ Consider factors like:
         rankingExplanation: parsed.rankingExplanation || 'Results ranked by relevance'
       };
     } catch (error) {
-      console.error('Error parsing result ranking response:', error);
+      logger.error('Failed to parse result ranking response', error, {
+        operation: 'parse_result_ranking_response',
+        service: 'cerebras-client'
+      });
       return {
         rankedResults: [],
         rankingExplanation: 'Error in ranking - using original order'

@@ -6,6 +6,24 @@
 import { SphyrError, isSphyrError, toSphyrError } from './errors';
 // import { APP_CONFIG } from './constants';
 
+// Simple logging utility to avoid circular dependency with logger
+const logToConsole = (level: 'info' | 'warn' | 'error', message: string, context?: any) => {
+  const timestamp = new Date().toISOString();
+  const contextStr = context ? `\n  Context: ${JSON.stringify(context, null, 2)}` : '';
+  
+  switch (level) {
+    case 'info':
+      console.info(`[${timestamp}] INFO: ${message}${contextStr}`);
+      break;
+    case 'warn':
+      console.warn(`[${timestamp}] WARN: ${message}${contextStr}`);
+      break;
+    case 'error':
+      console.error(`[${timestamp}] ERROR: ${message}${contextStr}`);
+      break;
+  }
+};
+
 // Sentry will be imported dynamically to avoid bundle bloat in development
 let Sentry: unknown = null;
 
@@ -30,7 +48,7 @@ if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
       },
     });
   }).catch((error) => {
-    console.warn('Failed to initialize Sentry:', error);
+    logToConsole('warn', 'Failed to initialize Sentry', { error: error.message });
   });
 }
 
@@ -72,7 +90,10 @@ class MonitoringService {
     try {
       // In development, just log to console
       if (process.env.NODE_ENV === 'development') {
-        console.log('🔍 Monitoring service initialized (development mode)');
+        logToConsole('info', 'Monitoring service initialized (development mode)', {
+          service: 'monitoring',
+          mode: 'development'
+        });
         this.isInitialized = true;
         return;
       }
@@ -87,9 +108,17 @@ class MonitoringService {
         }
 
         if (Sentry) {
-          console.log('🔍 Monitoring service initialized with Sentry');
+          logToConsole('info', 'Monitoring service initialized with Sentry', {
+            service: 'monitoring',
+            mode: 'production',
+            sentry: true
+          });
         } else {
-          console.warn('⚠️ Sentry failed to initialize, falling back to console logging');
+          logToConsole('warn', 'Sentry failed to initialize, falling back to console logging', {
+            service: 'monitoring',
+            mode: 'production',
+            sentry: false
+          });
         }
       }
 
@@ -98,7 +127,10 @@ class MonitoringService {
       // Process any queued errors
       this.processErrorQueue();
     } catch (error) {
-      console.error('Failed to initialize monitoring service:', error);
+      logToConsole('error', 'Failed to initialize monitoring service', {
+        service: 'monitoring',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       this.isInitialized = true; // Mark as initialized to prevent infinite retries
     }
   }
@@ -133,7 +165,11 @@ class MonitoringService {
         this.logErrorToConsole(sphyrError, report);
       }
     } catch (error) {
-      console.error('Failed to report error:', error);
+      logToConsole('error', 'Failed to report error to monitoring service', {
+        service: 'monitoring',
+        operation: 'report_error',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   }
 
@@ -156,28 +192,19 @@ class MonitoringService {
     //   extra: report.extra,
     // };
 
-    console.group(`🚨 ${error.metadata.severity?.toUpperCase()} ERROR: ${error.name}`);
-    console.error('Message:', error.message);
-    console.error('ID:', error.id);
-    console.error('Severity:', error.metadata.severity);
-    console.error('Category:', error.metadata.category);
-    console.error('Retryable:', error.isRetryable());
-    console.error('Context:', error.context);
-    console.error('Stack:', error.stack);
-    
-    if (report.user) {
-      console.error('User:', report.user);
-    }
-    
-    if (report.tags) {
-      console.error('Tags:', report.tags);
-    }
-    
-    if (report.extra) {
-      console.error('Extra:', report.extra);
-    }
-    
-    console.groupEnd();
+    logToConsole('error', `Error: ${error.name}`, {
+      service: 'monitoring',
+      operation: 'log_error_to_console',
+      errorId: error.id,
+      severity: error.metadata.severity,
+      category: error.metadata.category,
+      retryable: error.isRetryable(),
+      context: error.context,
+      stack: error.stack,
+      user: report.user,
+      tags: report.tags,
+      extra: report.extra
+    });
   }
 
   /**
@@ -220,7 +247,11 @@ class MonitoringService {
         sentry.captureException(error);
       });
     } catch (sentryError) {
-      console.error('Failed to send error to Sentry:', sentryError);
+      logToConsole('error', 'Failed to send error to Sentry', {
+        service: 'monitoring',
+        operation: 'send_to_sentry',
+        error: sentryError instanceof Error ? sentryError.message : 'Unknown Sentry error'
+      });
     }
   }
 
@@ -243,7 +274,11 @@ class MonitoringService {
   private async processErrorQueue(): Promise<void> {
     if (this.errorQueue.length === 0) return;
 
-    console.log(`📤 Processing ${this.errorQueue.length} queued errors`);
+    logToConsole('info', `Processing ${this.errorQueue.length} queued errors`, {
+      service: 'monitoring',
+      operation: 'process_error_queue',
+      queueLength: this.errorQueue.length
+    });
     
     const errorsToProcess = [...this.errorQueue];
     this.errorQueue = [];
@@ -264,7 +299,11 @@ class MonitoringService {
     try {
       // In development, log to console
       if (process.env.NODE_ENV === 'development') {
-        console.log('📊 Performance Metric:', metric);
+        logToConsole('info', 'Performance Metric', {
+          service: 'monitoring',
+          operation: 'track_metric',
+          metric: metric
+        });
         return;
       }
 
@@ -283,7 +322,11 @@ class MonitoringService {
         });
       }
     } catch (error) {
-      console.error('Failed to track metric:', error);
+      logToConsole('error', 'Failed to track metric', {
+        service: 'monitoring',
+        operation: 'track_metric',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
     }
   }
 
@@ -330,7 +373,11 @@ class MonitoringService {
       const sentry = Sentry as typeof import('@sentry/nextjs');
       sentry.captureMessage(message, level);
     } else if (process.env.NODE_ENV === 'development') {
-      console.log(`📝 ${level.toUpperCase()}: ${message}`);
+      logToConsole('info', `Message: ${message}`, {
+        service: 'monitoring',
+        operation: 'log_message',
+        level: level
+      });
     }
   }
 
@@ -383,5 +430,11 @@ export async function initializeMonitoring(): Promise<void> {
 
 // Auto-initialize in browser environment
 if (typeof window !== 'undefined') {
-  initializeMonitoring().catch(console.error);
+  initializeMonitoring().catch((error) => {
+    logToConsole('error', 'Failed to auto-initialize monitoring', {
+      service: 'monitoring',
+      operation: 'auto_initialize',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+  });
 }

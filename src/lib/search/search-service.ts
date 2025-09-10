@@ -5,6 +5,7 @@
 
 import { apiClient } from '../api-client';
 import { SEARCH_CONFIG } from '../constants';
+import { logger } from '../logger';
 import type { SearchResult, SearchQuery, SearchHistoryItem } from '../../components/search/utils/search-helpers';
 
 export interface SearchResponse {
@@ -59,7 +60,11 @@ class SearchService {
 
       return response.data;
     } catch (error) {
-      console.error('Search error:', error);
+      logger.error('Search operation failed', error, {
+        operation: 'search',
+        service: 'search-service',
+        query: searchQuery.query
+      });
       throw new Error('Failed to perform search');
     }
   }
@@ -77,7 +82,11 @@ class SearchService {
 
       return response.data;
     } catch (error) {
-      console.error('Suggestions error:', error);
+      logger.error('Failed to get search suggestions', error, {
+        operation: 'get_suggestions',
+        service: 'search-service',
+        query: query
+      });
       return [];
     }
   }
@@ -93,7 +102,10 @@ class SearchService {
 
       return response.data;
     } catch (error) {
-      console.error('Search history error:', error);
+      logger.error('Failed to get search history', error, {
+        operation: 'get_search_history',
+        service: 'search-service'
+      });
       return [];
     }
   }
@@ -113,7 +125,11 @@ class SearchService {
         filters,
       });
     } catch (error) {
-      console.error('Save search history error:', error);
+      logger.error('Failed to save search history', error, {
+        operation: 'save_search_history',
+        service: 'search-service',
+        query: query
+      });
       // Don't throw - this is not critical
     }
   }
@@ -125,7 +141,10 @@ class SearchService {
     try {
       await apiClient.delete('/search/history');
     } catch (error) {
-      console.error('Clear search history error:', error);
+      logger.error('Failed to clear search history', error, {
+        operation: 'clear_search_history',
+        service: 'search-service'
+      });
       throw new Error('Failed to clear search history');
     }
   }
@@ -141,7 +160,10 @@ class SearchService {
 
       return response.data;
     } catch (error) {
-      console.error('Search analytics error:', error);
+      logger.error('Failed to get search analytics', error, {
+        operation: 'get_search_analytics',
+        service: 'search-service'
+      });
       return null;
     }
   }
@@ -154,7 +176,10 @@ class SearchService {
       const response = await apiClient.get<string[]>('/search/sources');
       return response.data;
     } catch (error) {
-      console.error('Get sources error:', error);
+      logger.error('Failed to get search sources', error, {
+        operation: 'get_search_sources',
+        service: 'search-service'
+      });
       return [];
     }
   }
@@ -167,7 +192,11 @@ class SearchService {
       const response = await apiClient.get<SearchResult>(`/search/result/${resultId}`);
       return response.data;
     } catch (error) {
-      console.error('Get search result error:', error);
+      logger.error('Failed to get search result by ID', error, {
+        operation: 'get_search_result',
+        service: 'search-service',
+        resultId: resultId
+      });
       return null;
     }
   }
