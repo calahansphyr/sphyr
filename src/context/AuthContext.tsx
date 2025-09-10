@@ -69,7 +69,7 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
         setUser(session.user);
       }
     } catch (error) {
-      logger.error('Auth initialization failed', error, {
+      logger.error('Auth initialization failed', error instanceof Error ? error : new Error(String(error)), {
         operation: 'auth_initialization',
         component: 'AuthContext'
       });
@@ -98,7 +98,7 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
         setUser(data.user);
       }
     } catch (error) {
-      logger.error('User login failed', error, {
+      logger.error('User login failed', error instanceof Error ? error : new Error(String(error)), {
         operation: 'user_login',
         component: 'AuthContext',
         email: email // Email is safe to log as it's user input
@@ -154,7 +154,7 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
         }
       }
     } catch (error) {
-      logger.error('User registration failed', error, {
+      logger.error('User registration failed', error instanceof Error ? error : new Error(String(error)), {
         operation: 'user_registration',
         component: 'AuthContext',
         email: email // Email is safe to log as it's user input
@@ -174,7 +174,7 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
       setUser(null);
       window.location.href = '/auth/login';
     } catch (error) {
-      logger.error('User logout failed', error, {
+      logger.error('User logout failed', error instanceof Error ? error : new Error(String(error)), {
         operation: 'user_logout',
         component: 'AuthContext',
         userId: user?.id
@@ -206,7 +206,7 @@ export function AuthProvider({ children }: AuthProviderProps): React.JSX.Element
 
       return false;
     } catch (error) {
-      logger.error('Token refresh failed with exception', error, {
+      logger.error('Token refresh failed with exception', error instanceof Error ? error : new Error(String(error)), {
         operation: 'token_refresh',
         component: 'AuthContext',
         userId: user?.id

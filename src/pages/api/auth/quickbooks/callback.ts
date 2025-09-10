@@ -210,7 +210,7 @@ export default async function handler(
         operation: 'analytics_tracking',
         endpoint: '/api/auth/quickbooks/callback',
         provider: 'quickbooks',
-        userId: user.id,
+        userId: authUser.id,
         error: analyticsError instanceof Error ? analyticsError.message : 'Unknown analytics error'
       });
     }
@@ -219,7 +219,7 @@ export default async function handler(
     res.redirect(302, '/integrations?success=quickbooks_connected');
 
   } catch (error) {
-    logger.error('QuickBooks OAuth callback failed', error, {
+    logger.error('QuickBooks OAuth callback failed', error instanceof Error ? error : new Error(String(error)), {
       operation: 'oauth_callback',
       endpoint: '/api/auth/quickbooks/callback',
       provider: 'quickbooks'

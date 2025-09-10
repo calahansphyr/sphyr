@@ -5,7 +5,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 interface TestResponse {
   success: boolean;
   message: string;
-  data?: any;
+  data?: Record<string, unknown>;
   error?: string;
 }
 
@@ -37,7 +37,7 @@ export default async function handler(
     const supabase = createServiceClient();
     
     // Test database connection by querying organizations table
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('organizations')
       .select('count')
       .limit(1);
@@ -57,7 +57,7 @@ export default async function handler(
     }
     
     // Test auth connection
-    const { data: authData, error: authError } = await supabase.auth.getSession();
+    const { error: authError } = await supabase.auth.getSession();
     
     logger.info('Database connection test completed successfully', {
       operation: 'database_test',
@@ -77,7 +77,7 @@ export default async function handler(
       }
     });
   } catch (error) {
-    logger.error('Database connection test failed with exception', error, {
+    logger.error('Database connection test failed with exception', error instanceof Error ? error : new Error(String(error)), {
       operation: 'database_test',
       endpoint: '/api/test-db'
     });

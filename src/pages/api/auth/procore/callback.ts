@@ -175,7 +175,7 @@ export default async function handler(
         operation: 'fetch_user_info',
         endpoint: '/api/auth/procore/callback',
         provider: 'procore',
-        userId: user.id,
+        userId: authUser.id,
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       // Continue without user info
@@ -233,7 +233,7 @@ export default async function handler(
         operation: 'analytics_tracking',
         endpoint: '/api/auth/procore/callback',
         provider: 'procore',
-        userId: user.id,
+        userId: authUser.id,
         error: analyticsError instanceof Error ? analyticsError.message : 'Unknown analytics error'
       });
     }
@@ -242,7 +242,7 @@ export default async function handler(
     res.redirect(302, '/integrations?success=procore_connected');
 
   } catch (error) {
-    logger.error('Procore OAuth callback failed', error, {
+    logger.error('Procore OAuth callback failed', error instanceof Error ? error : new Error(String(error)), {
       operation: 'oauth_callback',
       endpoint: '/api/auth/procore/callback',
       provider: 'procore'

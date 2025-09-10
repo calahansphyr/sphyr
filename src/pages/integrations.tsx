@@ -147,7 +147,7 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/google/connect';
     } catch (error) {
-      logger.error('Failed to initiate Google connection', error, {
+      logger.error('Failed to initiate Google connection', error instanceof Error ? error : new Error(String(error)), {
         operation: 'integration_connect',
         component: 'IntegrationsPage',
         provider: 'google'
@@ -163,7 +163,7 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/slack/connect';
     } catch (error) {
-      logger.error('Failed to initiate Slack connection', error, {
+      logger.error('Failed to initiate Slack connection', error instanceof Error ? error : new Error(String(error)), {
         operation: 'integration_connect',
         component: 'IntegrationsPage',
         provider: 'slack'
@@ -179,7 +179,7 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/asana/connect';
     } catch (error) {
-      logger.error('Failed to initiate Asana connection', error, {
+      logger.error('Failed to initiate Asana connection', error instanceof Error ? error : new Error(String(error)), {
         operation: 'integration_connect',
         component: 'IntegrationsPage',
         provider: 'asana'
@@ -195,7 +195,7 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/quickbooks/connect';
     } catch (error) {
-      logger.error('Failed to initiate QuickBooks connection', error, {
+      logger.error('Failed to initiate QuickBooks connection', error instanceof Error ? error : new Error(String(error)), {
         operation: 'integration_connect',
         component: 'IntegrationsPage',
         provider: 'quickbooks'
@@ -211,7 +211,7 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/microsoft/connect';
     } catch (error) {
-      logger.error('Failed to initiate Microsoft connection', error, {
+      logger.error('Failed to initiate Microsoft connection', error instanceof Error ? error : new Error(String(error)), {
         operation: 'integration_connect',
         component: 'IntegrationsPage',
         provider: 'microsoft'
@@ -227,7 +227,7 @@ export default function IntegrationsPage() {
       // Redirect to our OAuth connect endpoint
       window.location.href = '/api/auth/procore/connect';
     } catch (error) {
-      logger.error('Failed to initiate Procore connection', error, {
+      logger.error('Failed to initiate Procore connection', error instanceof Error ? error : new Error(String(error)), {
         operation: 'integration_connect',
         component: 'IntegrationsPage',
         provider: 'procore'

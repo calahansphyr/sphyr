@@ -7,7 +7,7 @@ import { SphyrError, isSphyrError, toSphyrError } from './errors';
 // import { APP_CONFIG } from './constants';
 
 // Simple logging utility to avoid circular dependency with logger
-const logToConsole = (level: 'info' | 'warn' | 'error', message: string, context?: any) => {
+const logToConsole = (level: 'info' | 'warn' | 'error', message: string, context?: Record<string, unknown>) => {
   const timestamp = new Date().toISOString();
   const contextStr = context ? `\n  Context: ${JSON.stringify(context, null, 2)}` : '';
   

@@ -94,8 +94,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
         errorId: errorId,
         retryCount: this.state.retryCount,
         errorInfo: {
-          componentStack: errorInfo.componentStack,
-          errorBoundary: errorInfo.errorBoundary
+          componentStack: errorInfo.componentStack
         }
       });
     }

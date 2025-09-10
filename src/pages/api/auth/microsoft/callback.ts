@@ -230,7 +230,7 @@ export default async function handler(
         operation: 'analytics_tracking',
         endpoint: '/api/auth/microsoft/callback',
         provider: 'microsoft',
-        userId: user.id,
+        userId: authUser.id,
         error: analyticsError instanceof Error ? analyticsError.message : 'Unknown analytics error'
       });
     }
@@ -239,7 +239,7 @@ export default async function handler(
     res.redirect(302, '/integrations?success=microsoft_connected');
 
   } catch (error) {
-    logger.error('Microsoft OAuth callback failed', error, {
+    logger.error('Microsoft OAuth callback failed', error instanceof Error ? error : new Error(String(error)), {
       operation: 'oauth_callback',
       endpoint: '/api/auth/microsoft/callback',
       provider: 'microsoft'

@@ -191,10 +191,9 @@ Consider factors like:
         confidence: parsed.confidence || 0.5
       };
     } catch (error) {
-      logger.error('Failed to parse query processing response', error, {
+      logger.error('Failed to parse query processing response', error instanceof Error ? error : new Error(String(error)), {
         operation: 'parse_query_processing_response',
-        service: 'cerebras-client',
-        query: request.query
+        service: 'cerebras-client'
       });
       return {
         processedQuery: '',
@@ -221,7 +220,7 @@ Consider factors like:
         rankingExplanation: parsed.rankingExplanation || 'Results ranked by relevance'
       };
     } catch (error) {
-      logger.error('Failed to parse result ranking response', error, {
+      logger.error('Failed to parse result ranking response', error instanceof Error ? error : new Error(String(error)), {
         operation: 'parse_result_ranking_response',
         service: 'cerebras-client'
       });

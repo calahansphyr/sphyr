@@ -214,7 +214,7 @@ export default async function handler(
     res.redirect(302, '/integrations?success=google_connected');
 
   } catch (error) {
-    logger.error('Google OAuth callback failed', error, {
+    logger.error('Google OAuth callback failed', error instanceof Error ? error : new Error(String(error)), {
       operation: 'oauth_callback',
       endpoint: '/api/auth/google/callback',
       provider: 'google'

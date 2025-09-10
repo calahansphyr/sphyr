@@ -63,7 +63,7 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
       const historyData = await searchService.getSearchHistory();
       setHistory(historyData);
     } catch (err) {
-      logger.error('Failed to load search history', err, {
+      logger.error('Failed to load search history', err instanceof Error ? err : new Error(String(err)), {
         operation: 'load_search_history',
         component: 'useSearch'
       });
@@ -182,10 +182,10 @@ export function useSearch(options: UseSearchOptions = {}): UseSearchReturn {
       const newSuggestions = await searchService.getSuggestions(searchQuery);
       setSuggestions(newSuggestions);
     } catch (err) {
-      logger.error('Failed to get search suggestions', err, {
+      logger.error('Failed to get search suggestions', err instanceof Error ? err : new Error(String(err)), {
         operation: 'get_search_suggestions',
         component: 'useSearch',
-        query: query
+        query: searchQuery
       });
       setSuggestions([]);
     }
