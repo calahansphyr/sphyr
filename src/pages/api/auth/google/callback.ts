@@ -39,7 +39,12 @@ export default async function handler(
 
     // Check for OAuth errors
     if (oauthError) {
-      console.error('OAuth error from Google:', oauthError);
+      logger.error('OAuth error from Google', new Error(oauthError), {
+        operation: 'oauth_callback',
+        endpoint: '/api/auth/google/callback',
+        provider: 'google',
+        oauthError
+      });
       return res.redirect(302, '/integrations?error=oauth_denied');
     }
 
@@ -136,7 +141,12 @@ export default async function handler(
       return res.redirect(302, '/integrations?error=token_error');
     }
 
-    console.log('Successfully obtained Google OAuth tokens for user:', user.id);
+    logger.info('Successfully obtained Google OAuth tokens', {
+      operation: 'oauth_token_exchange',
+      endpoint: '/api/auth/google/callback',
+      provider: 'google',
+      userId: user.id
+    });
 
     // Store tokens securely in Supabase with authorization code
     const { error: insertError } = await supabase
@@ -157,16 +167,26 @@ export default async function handler(
       });
 
     if (insertError) {
-      console.error('Failed to store OAuth tokens:', insertError);
+      logger.error('Failed to store OAuth tokens', insertError, {
+        operation: 'store_tokens',
+        endpoint: '/api/auth/google/callback',
+        provider: 'google',
+        userId: user.id
+      });
       await reportError(insertError, { 
         endpoint: '/api/auth/google/callback', 
         operation: 'storeTokens',
-        userId: user.id 
+        userId: user.id
       });
       return res.redirect(302, '/integrations?error=storage_error');
     }
 
-    console.log('Successfully stored Google OAuth tokens for user:', user.id);
+    logger.info('Successfully stored Google OAuth tokens', {
+      operation: 'token_storage',
+      endpoint: '/api/auth/google/callback',
+      provider: 'google',
+      userId: user.id
+    });
 
     // Track integration connection event
     try {
@@ -181,14 +201,24 @@ export default async function handler(
         }
       );
     } catch (analyticsError) {
-      console.warn('Failed to track Google integration analytics:', analyticsError);
+      logger.warn('Failed to track Google integration analytics', {
+        operation: 'analytics_tracking',
+        endpoint: '/api/auth/google/callback',
+        provider: 'google',
+        userId: user.id,
+        error: analyticsError instanceof Error ? analyticsError.message : 'Unknown analytics error'
+      });
     }
 
     // Redirect to integrations page with success message
     res.redirect(302, '/integrations?success=google_connected');
 
   } catch (error) {
-    console.error('Google OAuth callback error:', error);
+    logger.error('Google OAuth callback failed', error, {
+      operation: 'oauth_callback',
+      endpoint: '/api/auth/google/callback',
+      provider: 'google'
+    });
     
     // Report error to monitoring service
     await reportError(error as Error, {

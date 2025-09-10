@@ -1,4 +1,5 @@
 import { createServiceClient } from '../../lib/supabase/server';
+import { logger, generateRequestId } from '../../lib/logger';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface TestResponse {
@@ -12,7 +13,20 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<TestResponse>
 ): Promise<void> {
+  const requestId = generateRequestId();
+  logger.setRequestId(requestId);
+  
+  logger.info('Database connection test initiated', {
+    endpoint: '/api/test-db',
+    method: req.method,
+    requestId
+  });
+
   if (req.method !== 'GET') {
+    logger.warn('Invalid method for database test endpoint', {
+      method: req.method,
+      endpoint: '/api/test-db'
+    });
     return res.status(405).json({ 
       success: false, 
       message: 'Method not allowed' 
@@ -29,7 +43,12 @@ export default async function handler(
       .limit(1);
     
     if (error) {
-      console.error('Database error:', error);
+      logger.error('Database connection test failed', error, {
+        operation: 'database_test',
+        endpoint: '/api/test-db',
+        errorCode: error.code,
+        errorMessage: error.message
+      });
       return res.status(500).json({ 
         success: false, 
         message: 'Database connection failed',
@@ -39,6 +58,14 @@ export default async function handler(
     
     // Test auth connection
     const { data: authData, error: authError } = await supabase.auth.getSession();
+    
+    logger.info('Database connection test completed successfully', {
+      operation: 'database_test',
+      endpoint: '/api/test-db',
+      databaseStatus: 'Connected',
+      authStatus: authError ? 'Error' : 'Available',
+      authError: authError?.message
+    });
     
     res.status(200).json({ 
       success: true, 
@@ -50,7 +77,10 @@ export default async function handler(
       }
     });
   } catch (error) {
-    console.error('Connection test error:', error);
+    logger.error('Database connection test failed with exception', error, {
+      operation: 'database_test',
+      endpoint: '/api/test-db'
+    });
     res.status(500).json({ 
       success: false, 
       message: 'Connection test failed',

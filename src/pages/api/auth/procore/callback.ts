@@ -9,6 +9,7 @@ import { ValidationError, AuthenticationError } from '@/lib/errors';
 import { createClient } from '@/lib/supabase/server';
 import { OAuthCallbackSchema } from '@/lib/schemas';
 import { productAnalytics } from '@/lib/analytics';
+import { logger } from '@/lib/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -65,7 +66,12 @@ export default async function handler(
     });
 
     if (codeCheckError) {
-      console.warn('Failed to check authorization code usage:', codeCheckError.message);
+      logger.warn('Failed to check authorization code usage', {
+        operation: 'check_authorization_code',
+        endpoint: '/api/auth/procore/callback',
+        provider: 'procore',
+        error: codeCheckError.message
+      });
     } else if (codeUsed) {
       // Code has already been used, get existing token info
       const { data: existingToken, error: tokenError } = await supabase.rpc('get_token_by_authorization_code', {
@@ -73,12 +79,19 @@ export default async function handler(
       });
 
       if (tokenError) {
-        console.warn('Failed to get existing token info:', tokenError.message);
+        logger.warn('Failed to get existing token info', {
+          operation: 'get_existing_token',
+          endpoint: '/api/auth/procore/callback',
+          provider: 'procore',
+          error: tokenError.message
+        });
       } else if (existingToken && existingToken.length > 0) {
-        console.log('Authorization code already used, redirecting to success:', {
+        logger.info('Authorization code already used, redirecting to success', {
+          operation: 'duplicate_authorization_code',
+          endpoint: '/api/auth/procore/callback',
+          provider: 'procore',
           tokenId: existingToken[0].id,
           userId: existingToken[0].user_id,
-          provider: existingToken[0].provider,
           createdAt: existingToken[0].created_at
         });
       }
@@ -158,7 +171,13 @@ export default async function handler(
         userInfo = await userResponse.json();
       }
     } catch (error) {
-      console.warn('Failed to fetch Procore user info:', error);
+      logger.warn('Failed to fetch Procore user info', {
+        operation: 'fetch_user_info',
+        endpoint: '/api/auth/procore/callback',
+        provider: 'procore',
+        userId: user.id,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       // Continue without user info
     }
 
@@ -210,14 +229,24 @@ export default async function handler(
         }
       );
     } catch (analyticsError) {
-      console.warn('Failed to track Procore integration analytics:', analyticsError);
+      logger.warn('Failed to track Procore integration analytics', {
+        operation: 'analytics_tracking',
+        endpoint: '/api/auth/procore/callback',
+        provider: 'procore',
+        userId: user.id,
+        error: analyticsError instanceof Error ? analyticsError.message : 'Unknown analytics error'
+      });
     }
 
     // Redirect to integrations page with success message
     res.redirect(302, '/integrations?success=procore_connected');
 
   } catch (error) {
-    console.error('Procore OAuth callback error:', error);
+    logger.error('Procore OAuth callback failed', error, {
+      operation: 'oauth_callback',
+      endpoint: '/api/auth/procore/callback',
+      provider: 'procore'
+    });
     
     // Report error to monitoring service
     await reportError(error as Error, {

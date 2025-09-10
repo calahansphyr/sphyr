@@ -11,6 +11,7 @@ import { ValidationError, AuthenticationError } from '@/lib/errors';
 import { createClient } from '@/lib/supabase/server';
 import { OAuthCallbackSchema } from '@/lib/schemas';
 import { productAnalytics } from '@/lib/analytics';
+import { logger } from '@/lib/logger';
 
 export default async function handler(
   req: NextApiRequest,
@@ -67,7 +68,12 @@ export default async function handler(
     });
 
     if (codeCheckError) {
-      console.warn('Failed to check authorization code usage:', codeCheckError.message);
+      logger.warn('Failed to check authorization code usage', {
+        operation: 'check_authorization_code',
+        endpoint: '/api/auth/microsoft/callback',
+        provider: 'microsoft',
+        error: codeCheckError.message
+      });
     } else if (codeUsed) {
       // Code has already been used, get existing token info
       const { data: existingToken, error: tokenError } = await supabase.rpc('get_token_by_authorization_code', {
@@ -75,12 +81,19 @@ export default async function handler(
       });
 
       if (tokenError) {
-        console.warn('Failed to get existing token info:', tokenError.message);
+        logger.warn('Failed to get existing token info', {
+          operation: 'get_existing_token',
+          endpoint: '/api/auth/microsoft/callback',
+          provider: 'microsoft',
+          error: tokenError.message
+        });
       } else if (existingToken && existingToken.length > 0) {
-        console.log('Authorization code already used, redirecting to success:', {
+        logger.info('Authorization code already used, redirecting to success', {
+          operation: 'duplicate_authorization_code',
+          endpoint: '/api/auth/microsoft/callback',
+          provider: 'microsoft',
           tokenId: existingToken[0].id,
           userId: existingToken[0].user_id,
-          provider: existingToken[0].provider,
           createdAt: existingToken[0].created_at
         });
       }
@@ -163,7 +176,12 @@ export default async function handler(
         }
       }
     } catch (error) {
-      console.warn('Failed to extract tenant ID from user info:', error);
+      logger.warn('Failed to extract tenant ID from user info', {
+        operation: 'extract_tenant_id',
+        endpoint: '/api/auth/microsoft/callback',
+        provider: 'microsoft',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
       // Continue with default tenant ID
     }
 
@@ -208,14 +226,24 @@ export default async function handler(
         }
       );
     } catch (analyticsError) {
-      console.warn('Failed to track Microsoft integration analytics:', analyticsError);
+      logger.warn('Failed to track Microsoft integration analytics', {
+        operation: 'analytics_tracking',
+        endpoint: '/api/auth/microsoft/callback',
+        provider: 'microsoft',
+        userId: user.id,
+        error: analyticsError instanceof Error ? analyticsError.message : 'Unknown analytics error'
+      });
     }
 
     // Redirect to integrations page with success message
     res.redirect(302, '/integrations?success=microsoft_connected');
 
   } catch (error) {
-    console.error('Microsoft OAuth callback error:', error);
+    logger.error('Microsoft OAuth callback failed', error, {
+      operation: 'oauth_callback',
+      endpoint: '/api/auth/microsoft/callback',
+      provider: 'microsoft'
+    });
     
     // Report error to monitoring service
     await reportError(error as Error, {
