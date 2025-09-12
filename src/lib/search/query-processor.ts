@@ -7,6 +7,7 @@ import { CerebrasClient } from '@/lib/ai/cerebras-client';
 import { logger } from '@/lib/logger';
 import { AdapterFactory } from '@/lib/integrations/adapter-factory';
 import type { AllAdapters } from '@/lib/integrations/adapter-factory';
+import type { IntegrationStatus } from '@/types/ai';
 
 export interface QueryProcessingRequest {
   originalQuery: string;
@@ -37,13 +38,28 @@ export class QueryProcessor {
   async processQuery(request: QueryProcessingRequest): Promise<QueryProcessingResult> {
     const { originalQuery, userId, organizationId, adapters } = request;
     
+    const availableAdapters = AdapterFactory.getAvailableAdapters(adapters);
+    const activeIntegrations: IntegrationStatus[] = availableAdapters.map(adapter => ({
+      provider: adapter,
+      connected: true,
+      connectedAt: new Date().toISOString(),
+      lastSync: new Date().toISOString(),
+      permissions: [],
+      scopes: []
+    }));
+
     const queryProcessingRequest = {
       originalQuery: originalQuery.trim(),
       context: {
         userHistory: [], // In production, fetch from user's search history
-        organizationData: { organizationId },
+        organizationData: {
+          id: organizationId,
+          name: 'Default Organization',
+          settings: {},
+          integrations: activeIntegrations
+        },
         recentSearches: [], // In production, fetch recent searches
-        activeIntegrations: AdapterFactory.getAvailableAdapters(adapters),
+        activeIntegrations,
       },
       userId,
       organizationId,

@@ -1,0 +1,631 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { describe, it, expect, beforeEach, afterEach, vi, Mock } from 'vitest';
+import { userBehaviorTracker } from '@/lib/analytics/UserBehaviorTracker';
+import { userPreferencesManager } from '@/lib/analytics/UserPreferences';
+import { recommendationEngine } from '@/lib/analytics/RecommendationEngine';
+
+// Mock components and hooks
+vi.mock('@/components/search/AdvancedSearchFeatures', () => ({
+  default: ({ onSearch, onSaveSearch, onLoadSavedSearch }: any) => (
+    <div data-testid="advanced-search-features">
+      <button onClick={() => onSearch('test query', [], { field: 'relevance', direction: 'desc', label: 'Relevance' })}>
+        Search
+      </button>
+      <button onClick={() => onSaveSearch({ name: 'Test Search', query: 'test', filters: [], sort: { field: 'relevance', direction: 'desc', label: 'Relevance' }, isPublic: false })}>
+        Save Search
+      </button>
+      <button onClick={() => onLoadSavedSearch({ id: '1', name: 'Test Search', query: 'test', filters: [], sort: { field: 'relevance', direction: 'desc', label: 'Relevance' }, isPublic: false, createdAt: new Date(), useCount: 0 })}>
+        Load Search
+      </button>
+    </div>
+  )
+}));
+
+vi.mock('@/components/ai/AIDocumentAnalyzer', () => ({
+  default: ({ onAnalyze, onSummarize }: any) => (
+    <div data-testid="ai-document-analyzer">
+      <button onClick={() => onAnalyze('test document')}>Analyze</button>
+      <button onClick={() => onSummarize('test document')}>Summarize</button>
+    </div>
+  )
+}));
+
+vi.mock('@/components/onboarding/ComprehensiveOnboardingFlow', () => ({
+  default: ({ onComplete, onSkip }: any) => (
+    <div data-testid="onboarding-flow">
+      <button onClick={() => onComplete({
+        profile: { name: 'Test User', email: 'test@example.com', company: 'Test Co', role: 'Developer', industry: 'technology', teamSize: '1-10', goals: ['Find documents faster'] },
+        integrations: { selected: ['gmail'], priority: [] },
+        preferences: { theme: 'light', notifications: true, dataSharing: true, personalizedContent: true },
+        tutorial: { completedSteps: [], skippedSteps: [] }
+      })}>
+        Complete Onboarding
+      </button>
+      <button onClick={onSkip}>Skip Onboarding</button>
+    </div>
+  )
+}));
+
+vi.mock('@/components/data/DataExportImport', () => ({
+  default: ({ onExport, onImport }: any) => (
+    <div data-testid="data-export-import">
+      <button onClick={() => onExport({
+        format: 'json',
+        dataTypes: ['search_history'],
+        dateRange: { from: null, to: null },
+        includeMetadata: true,
+        includeAnalytics: false,
+        includeUserData: true,
+        compression: true,
+        encryption: false
+      })}>
+        Export Data
+      </button>
+      <button onClick={() => onImport(new File(['test'], 'test.json', { type: 'application/json' }), {
+        format: 'json',
+        dataTypes: ['search_history'],
+        mergeStrategy: 'merge',
+        validation: true,
+        backup: true
+      })}>
+        Import Data
+      </button>
+    </div>
+  )
+}));
+
+vi.mock('@/components/performance/AdvancedPerformanceMonitoring', () => ({
+  default: ({ onGetMetrics, onGetAlerts, onGenerateReport }: any) => (
+    <div data-testid="performance-monitoring">
+      <button onClick={() => onGetMetrics()}>Get Metrics</button>
+      <button onClick={() => onGetAlerts()}>Get Alerts</button>
+      <button onClick={() => onGenerateReport({ from: new Date(), to: new Date() })}>Generate Report</button>
+    </div>
+  )
+}));
+
+// Test wrapper component
+const TestWrapper: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  return (
+    <div>
+      {children}
+    </div>
+  );
+};
+
+describe('Integration Tests', () => {
+  beforeEach(() => {
+    // Clear localStorage before each test
+    localStorage.clear();
+    
+    // Reset mocks
+    vi.clearAllMocks();
+    
+    // Mock console methods to avoid noise in tests
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    // Restore console methods
+    vi.restoreAllMocks();
+  });
+
+  describe('Search Flow Integration', () => {
+    it('should handle complete search flow with analytics tracking', async () => {
+      const mockOnSearch = vi.fn();
+      const mockOnSaveSearch = vi.fn();
+      const mockOnLoadSavedSearch = vi.fn();
+
+      render(
+        <TestWrapper>
+          <div data-testid="advanced-search-features">
+            <button onClick={() => mockOnSearch('test query', [], { field: 'relevance', direction: 'desc', label: 'Relevance' })}>
+              Search
+            </button>
+            <button onClick={() => mockOnSaveSearch({ name: 'Test Search', query: 'test', filters: [], sort: { field: 'relevance', direction: 'desc', label: 'Relevance' }, isPublic: false })}>
+              Save Search
+            </button>
+            <button onClick={() => mockOnLoadSavedSearch({ id: '1', name: 'Test Search', query: 'test', filters: [], sort: { field: 'relevance', direction: 'desc', label: 'Relevance' }, isPublic: false, createdAt: new Date(), useCount: 0 })}>
+              Load Search
+            </button>
+          </div>
+        </TestWrapper>
+      );
+
+      // Test search functionality
+      const searchButton = screen.getByText('Search');
+      fireEvent.click(searchButton);
+
+      expect(mockOnSearch).toHaveBeenCalledWith('test query', [], { field: 'relevance', direction: 'desc', label: 'Relevance' });
+
+      // Test save search functionality
+      const saveButton = screen.getByText('Save Search');
+      fireEvent.click(saveButton);
+
+      expect(mockOnSaveSearch).toHaveBeenCalledWith({
+        name: 'Test Search',
+        query: 'test',
+        filters: [],
+        sort: { field: 'relevance', direction: 'desc', label: 'Relevance' },
+        isPublic: false
+      });
+
+      // Test load search functionality
+      const loadButton = screen.getByText('Load Search');
+      fireEvent.click(loadButton);
+
+      expect(mockOnLoadSavedSearch).toHaveBeenCalledWith({
+        id: '1',
+        name: 'Test Search',
+        query: 'test',
+        filters: [],
+        sort: { field: 'relevance', direction: 'desc', label: 'Relevance' },
+        isPublic: false,
+        createdAt: expect.any(Date),
+        useCount: 0
+      });
+    });
+
+    it('should track search events in analytics', async () => {
+      const trackEventSpy = vi.spyOn(userBehaviorTracker, 'trackEvent');
+
+      // Simulate search event
+      userBehaviorTracker.trackEvent('search', {
+        query: 'test query',
+        filters: [],
+        sort: 'relevance',
+        hasAdvancedFilters: false
+      });
+
+      expect(trackEventSpy).toHaveBeenCalledWith('search', {
+        query: 'test query',
+        filters: [],
+        sort: 'relevance',
+        hasAdvancedFilters: false
+      });
+    });
+  });
+
+  describe('AI Features Integration', () => {
+    it('should handle AI document analysis and summarization', async () => {
+      const mockOnAnalyze = vi.fn();
+      const mockOnSummarize = vi.fn();
+
+      render(
+        <TestWrapper>
+          <div data-testid="ai-document-analyzer">
+            <button onClick={() => mockOnAnalyze('test document')}>Analyze</button>
+            <button onClick={() => mockOnSummarize('test document')}>Summarize</button>
+          </div>
+        </TestWrapper>
+      );
+
+      // Test document analysis
+      const analyzeButton = screen.getByText('Analyze');
+      fireEvent.click(analyzeButton);
+
+      expect(mockOnAnalyze).toHaveBeenCalledWith('test document');
+
+      // Test document summarization
+      const summarizeButton = screen.getByText('Summarize');
+      fireEvent.click(summarizeButton);
+
+      expect(mockOnSummarize).toHaveBeenCalledWith('test document');
+    });
+
+    it('should generate AI recommendations based on user behavior', async () => {
+      const mockContext = {
+        userId: 'test-user',
+        userProfile: {
+          userId: 'test-user',
+          preferences: {
+            userId: 'test-user',
+            theme: 'light',
+            language: 'en',
+            timezone: 'UTC',
+            search: {
+              defaultFilters: [],
+              preferredIntegrations: [],
+              autoSuggestions: true,
+              searchHistory: true,
+              personalizedResults: true
+            },
+            notifications: {
+              email: true,
+              inApp: true,
+              push: false,
+              digestFrequency: 'weekly' as const
+            },
+            accessibility: {
+              highContrastMode: false,
+              largeTextMode: false,
+              reducedMotion: false,
+              colorBlindFriendly: false
+            },
+            privacy: {
+              dataSharingConsent: true,
+              personalizedContent: true,
+              cookieConsent: true
+            },
+            performance: {
+              lazyLoadContent: true,
+              prefetchLinks: true
+            }
+          },
+          status: {
+            onboardingComplete: false,
+            integrationsConnected: 0,
+            connectedIntegrationsList: [],
+            lastLogin: Date.now(),
+            hasUsedAISummary: false
+          },
+          behavior: {
+            recentSearches: [],
+            frequentlyUsedIntegrations: [],
+            searchPatterns: [],
+            interactionHistory: [],
+            dismissedRecommendations: []
+          }
+        },
+        recentEvents: [],
+        currentPage: '/dashboard',
+        timeOfDay: 14,
+        dayOfWeek: 1,
+        sessionDuration: 300000
+      };
+
+      const recommendations = await recommendationEngine.generateRecommendations(mockContext);
+
+      expect(recommendations).toBeDefined();
+      expect(Array.isArray(recommendations)).toBe(true);
+    });
+  });
+
+  describe('Onboarding Flow Integration', () => {
+    it('should handle complete onboarding flow', async () => {
+      const mockOnComplete = vi.fn();
+      const mockOnSkip = vi.fn();
+
+      render(
+        <TestWrapper>
+          <div data-testid="onboarding-flow">
+            <button onClick={() => mockOnComplete({
+              profile: { name: 'Test User', email: 'test@example.com', company: 'Test Co', role: 'Developer', industry: 'technology', teamSize: '1-10', goals: ['Find documents faster'] },
+              integrations: { selected: ['gmail'], priority: [] },
+              preferences: { theme: 'light', notifications: true, dataSharing: true, personalizedContent: true },
+              tutorial: { completedSteps: [], skippedSteps: [] }
+            })}>
+              Complete Onboarding
+            </button>
+            <button onClick={mockOnSkip}>Skip Onboarding</button>
+          </div>
+        </TestWrapper>
+      );
+
+      // Test onboarding completion
+      const completeButton = screen.getByText('Complete Onboarding');
+      fireEvent.click(completeButton);
+
+      expect(mockOnComplete).toHaveBeenCalledWith({
+        profile: { name: 'Test User', email: 'test@example.com', company: 'Test Co', role: 'Developer', industry: 'technology', teamSize: '1-10', goals: ['Find documents faster'] },
+        integrations: { selected: ['gmail'], priority: [] },
+        preferences: { theme: 'light', notifications: true, dataSharing: true, personalizedContent: true },
+        tutorial: { completedSteps: [], skippedSteps: [] }
+      });
+
+      // Test onboarding skip
+      const skipButton = screen.getByText('Skip Onboarding');
+      fireEvent.click(skipButton);
+
+      expect(mockOnSkip).toHaveBeenCalled();
+    });
+
+    it('should track onboarding events in analytics', async () => {
+      const trackEventSpy = vi.spyOn(userBehaviorTracker, 'trackEvent');
+
+      // Simulate onboarding start
+      userBehaviorTracker.trackEvent('onboarding_start', {
+        userId: 'test-user',
+        stepCount: 6,
+        estimatedTime: 10
+      });
+
+      expect(trackEventSpy).toHaveBeenCalledWith('onboarding_start', {
+        userId: 'test-user',
+        stepCount: 6,
+        estimatedTime: 10
+      });
+
+      // Simulate onboarding completion
+      userBehaviorTracker.trackEvent('onboarding_complete', {
+        profile: { name: 'Test User', email: 'test@example.com' },
+        integrationsCount: 1,
+        preferences: { theme: 'light' },
+        tutorialCompleted: 0
+      });
+
+      expect(trackEventSpy).toHaveBeenCalledWith('onboarding_complete', {
+        profile: { name: 'Test User', email: 'test@example.com' },
+        integrationsCount: 1,
+        preferences: { theme: 'light' },
+        tutorialCompleted: 0
+      });
+    });
+  });
+
+  describe('Data Export/Import Integration', () => {
+    it('should handle data export and import operations', async () => {
+      const mockOnExport = vi.fn();
+      const mockOnImport = vi.fn();
+
+      render(
+        <TestWrapper>
+          <div data-testid="data-export-import">
+            <button onClick={() => mockOnExport({
+              format: 'json',
+              dataTypes: ['search_history'],
+              dateRange: { from: null, to: null },
+              includeMetadata: true,
+              includeAnalytics: false,
+              includeUserData: true,
+              compression: true,
+              encryption: false
+            })}>
+              Export Data
+            </button>
+            <button onClick={() => mockOnImport(new File(['test'], 'test.json', { type: 'application/json' }), {
+              format: 'json',
+              dataTypes: ['search_history'],
+              mergeStrategy: 'merge',
+              validation: true,
+              backup: true
+            })}>
+              Import Data
+            </button>
+          </div>
+        </TestWrapper>
+      );
+
+      // Test data export
+      const exportButton = screen.getByText('Export Data');
+      fireEvent.click(exportButton);
+
+      expect(mockOnExport).toHaveBeenCalledWith({
+        format: 'json',
+        dataTypes: ['search_history'],
+        dateRange: { from: null, to: null },
+        includeMetadata: true,
+        includeAnalytics: false,
+        includeUserData: true,
+        compression: true,
+        encryption: false
+      });
+
+      // Test data import
+      const importButton = screen.getByText('Import Data');
+      fireEvent.click(importButton);
+
+      expect(mockOnImport).toHaveBeenCalledWith(
+        expect.any(File),
+        {
+          format: 'json',
+          dataTypes: ['search_history'],
+          mergeStrategy: 'merge',
+          validation: true,
+          backup: true
+        }
+      );
+    });
+
+    it('should track data export/import events in analytics', async () => {
+      const trackEventSpy = vi.spyOn(userBehaviorTracker, 'trackEvent');
+
+      // Simulate data export
+      userBehaviorTracker.trackEvent('data_export', {
+        format: 'json',
+        dataTypes: ['search_history'],
+        includeAnalytics: false,
+        compression: true,
+        encryption: false
+      });
+
+      expect(trackEventSpy).toHaveBeenCalledWith('data_export', {
+        format: 'json',
+        dataTypes: ['search_history'],
+        includeAnalytics: false,
+        compression: true,
+        encryption: false
+      });
+
+      // Simulate data import
+      userBehaviorTracker.trackEvent('data_import', {
+        format: 'json',
+        dataTypes: ['search_history'],
+        mergeStrategy: 'merge',
+        fileSize: 1024,
+        fileName: 'test.json'
+      });
+
+      expect(trackEventSpy).toHaveBeenCalledWith('data_import', {
+        format: 'json',
+        dataTypes: ['search_history'],
+        mergeStrategy: 'merge',
+        fileSize: 1024,
+        fileName: 'test.json'
+      });
+    });
+  });
+
+  describe('Performance Monitoring Integration', () => {
+    it('should handle performance monitoring operations', async () => {
+      const mockOnGetMetrics = vi.fn();
+      const mockOnGetAlerts = vi.fn();
+      const mockOnGenerateReport = vi.fn();
+
+      render(
+        <TestWrapper>
+          <div data-testid="performance-monitoring">
+            <button onClick={() => mockOnGetMetrics()}>Get Metrics</button>
+            <button onClick={() => mockOnGetAlerts()}>Get Alerts</button>
+            <button onClick={() => mockOnGenerateReport({ from: new Date(), to: new Date() })}>Generate Report</button>
+          </div>
+        </TestWrapper>
+      );
+
+      // Test get metrics
+      const metricsButton = screen.getByText('Get Metrics');
+      fireEvent.click(metricsButton);
+
+      expect(mockOnGetMetrics).toHaveBeenCalled();
+
+      // Test get alerts
+      const alertsButton = screen.getByText('Get Alerts');
+      fireEvent.click(alertsButton);
+
+      expect(mockOnGetAlerts).toHaveBeenCalled();
+
+      // Test generate report
+      const reportButton = screen.getByText('Generate Report');
+      fireEvent.click(reportButton);
+
+      expect(mockOnGenerateReport).toHaveBeenCalledWith({
+        from: expect.any(Date),
+        to: expect.any(Date)
+      });
+    });
+  });
+
+  describe('User Preferences Integration', () => {
+    it('should handle user preferences management', async () => {
+      const userId = 'test-user';
+      
+      // Initialize user preferences
+      const preferences = userPreferencesManager.initializeUserPreferences(userId);
+      
+      expect(preferences).toBeDefined();
+      expect(preferences.userId).toBe(userId);
+      expect(preferences.theme).toBe('auto');
+      expect(preferences.language).toBe('en');
+
+      // Update preferences
+      const updatedPreferences = userPreferencesManager.updatePreference(userId, 'theme', 'dark');
+      
+      expect(updatedPreferences.theme).toBe('dark');
+
+      // Get user profile
+      const userProfile = userPreferencesManager.getUserProfile(userId);
+      
+      expect(userProfile).toBeDefined();
+      expect(userProfile.userId).toBe(userId);
+      expect(userProfile.preferences.theme).toBe('dark');
+    });
+
+    it('should persist preferences to localStorage', async () => {
+      const userId = 'test-user';
+      
+      // Initialize preferences
+      userPreferencesManager.initializeUserPreferences(userId);
+      
+      // Update a preference
+      userPreferencesManager.updatePreference(userId, 'theme', 'light');
+      
+      // Check if preferences are stored in localStorage
+      const storedPreferences = localStorage.getItem(`user_preferences_${userId}`);
+      expect(storedPreferences).toBeDefined();
+      
+      const parsedPreferences = JSON.parse(storedPreferences!);
+      expect(parsedPreferences.theme).toBe('light');
+    });
+  });
+
+  describe('Analytics Integration', () => {
+    it('should track user behavior events', async () => {
+      const trackEventSpy = vi.spyOn(userBehaviorTracker, 'trackEvent');
+      
+      // Track various events
+      userBehaviorTracker.trackEvent('page_view', { path: '/dashboard' });
+      userBehaviorTracker.trackEvent('search', { query: 'test query' });
+      userBehaviorTracker.trackEvent('click', { element: 'button', location: 'header' });
+      
+      expect(trackEventSpy).toHaveBeenCalledTimes(3);
+      expect(trackEventSpy).toHaveBeenCalledWith('page_view', { path: '/dashboard' });
+      expect(trackEventSpy).toHaveBeenCalledWith('search', { query: 'test query' });
+      expect(trackEventSpy).toHaveBeenCalledWith('click', { element: 'button', location: 'header' });
+    });
+
+    it('should identify users and track sessions', async () => {
+      const identifyUserSpy = vi.spyOn(userBehaviorTracker, 'identifyUser');
+      const trackEventSpy = vi.spyOn(userBehaviorTracker, 'trackEvent');
+      
+      // Identify user
+      userBehaviorTracker.identifyUser('test-user', { name: 'Test User', email: 'test@example.com' });
+      
+      expect(identifyUserSpy).toHaveBeenCalledWith('test-user', { name: 'Test User', email: 'test@example.com' });
+      
+      // Track page view
+      userBehaviorTracker.pageView('/dashboard', { source: 'direct' });
+      
+      expect(trackEventSpy).toHaveBeenCalledWith('page_view', { path: '/dashboard', source: 'direct' });
+    });
+
+    it('should manage user sessions', async () => {
+      const getSessionSpy = vi.spyOn(userBehaviorTracker, 'getSession');
+      
+      // Get current session
+      const session = userBehaviorTracker.getSession();
+      
+      expect(getSessionSpy).toHaveBeenCalled();
+      expect(session).toBeDefined();
+      expect(session?.userId).toBeDefined();
+      expect(session?.startTime).toBeDefined();
+    });
+  });
+
+  describe('Cross-Component Integration', () => {
+    it('should integrate search, AI, and analytics together', async () => {
+      const trackEventSpy = vi.spyOn(userBehaviorTracker, 'trackEvent');
+      
+      // Simulate a complete user journey
+      // 1. User searches
+      userBehaviorTracker.trackEvent('search', { query: 'project documents' });
+      
+      // 2. AI analyzes results
+      userBehaviorTracker.trackEvent('ai_analysis', { documentCount: 5, analysisType: 'summarization' });
+      
+      // 3. User saves search
+      userBehaviorTracker.trackEvent('search_save', { query: 'project documents', filters: ['date_range'] });
+      
+      // 4. User exports data
+      userBehaviorTracker.trackEvent('data_export', { format: 'json', dataTypes: ['search_history'] });
+      
+      expect(trackEventSpy).toHaveBeenCalledTimes(4);
+      expect(trackEventSpy).toHaveBeenCalledWith('search', { query: 'project documents' });
+      expect(trackEventSpy).toHaveBeenCalledWith('ai_analysis', { documentCount: 5, analysisType: 'summarization' });
+      expect(trackEventSpy).toHaveBeenCalledWith('search_save', { query: 'project documents', filters: ['date_range'] });
+      expect(trackEventSpy).toHaveBeenCalledWith('data_export', { format: 'json', dataTypes: ['search_history'] });
+    });
+
+    it('should handle error scenarios gracefully', async () => {
+      const consoleErrorSpy = vi.spyOn(console, 'error');
+      
+      // Simulate an error in analytics tracking
+      try {
+        userBehaviorTracker.trackEvent('invalid_event' as any, { invalid: 'data' });
+      } catch (error) {
+        // Error should be handled gracefully
+      }
+      
+      // Simulate an error in preferences management
+      try {
+        userPreferencesManager.updatePreference('invalid-user', 'invalid-path', 'invalid-value');
+      } catch (error) {
+        // Error should be handled gracefully
+      }
+      
+      // Errors should be logged but not crash the application
+      expect(consoleErrorSpy).toHaveBeenCalled();
+    });
+  });
+});

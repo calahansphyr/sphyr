@@ -340,10 +340,16 @@ export interface SearchResult {
   title: string;
   content: string;
   source: string;
-  integrationType: IntegrationType;
-  metadata: Record<string, unknown>;
+  integrationType?: IntegrationType;
+  metadata?: Record<string, unknown>;
   url?: string;
   createdAt: string;
+  updatedAt?: string;
+  author?: string;
+  tags?: string[];
+  size?: number;
+  contentType?: string;
+  visibility?: 'public' | 'private' | 'shared' | 'restricted';
 }
 
 // Microsoft 365 types

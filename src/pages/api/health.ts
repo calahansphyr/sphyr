@@ -7,6 +7,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import { createServiceClient } from '@/lib/supabase/server';
 import { logger } from '@/lib/logger';
 import { reportError } from '@/lib/monitoring';
+import { createErrorResponse } from '@/lib/schemas';
 import { searchOrchestrator } from '@/lib/search/search-orchestrator';
 
 interface HealthCheckResult {
@@ -33,7 +34,7 @@ interface HealthCheck {
   details?: Record<string, unknown>;
 }
 
-export default async function handler(
+async function healthHandler(
   req: NextApiRequest,
   res: NextApiResponse<HealthCheckResult | { error: string }>
 ) {
@@ -94,10 +95,12 @@ export default async function handler(
       requestId,
     });
 
-    res.status(503).json({
-      error: 'Health check failed',
-      timestamp: new Date().toISOString(),
-    });
+    res.status(503).json(createErrorResponse(
+      'Health check failed',
+      'HEALTH_CHECK_ERROR',
+      { responseTime },
+      requestId
+    ));
   }
 }
 
@@ -430,3 +433,6 @@ function determineOverallStatus(checks: HealthCheckResult['checks']): 'healthy' 
   // All checks pass
   return 'healthy';
 }
+
+// Export handler
+export default healthHandler;

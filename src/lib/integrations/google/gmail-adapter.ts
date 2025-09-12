@@ -4,7 +4,8 @@
  */
 
 import { google, gmail_v1 } from 'googleapis';
-import { IntegrationError, toSphyrError } from '@/lib/errors';
+import { IntegrationError } from '@/lib/errors';
+import { handleIntegrationError } from '../error-handler';
 import { withRetry, DEFAULT_RETRY_CONFIG } from '@/lib/resilience';
 import type { 
   GmailMessage, 
@@ -96,7 +97,7 @@ export class GmailAdapter {
     );
 
     if (!retryResult.success) {
-      throw this.handleGmailError(retryResult.error!, 'searchMessages', { options });
+      throw handleIntegrationError(retryResult.error!, 'Google Gmail', 'searchMessages', { options });
     }
 
     return retryResult.data!;
@@ -120,7 +121,7 @@ export class GmailAdapter {
     );
 
     if (!retryResult.success) {
-      throw this.handleGmailError(retryResult.error!, 'getMessage', { messageId });
+      throw handleIntegrationError(retryResult.error!, 'Google Gmail', 'getMessage', { messageId });
     }
 
     return retryResult.data!;
@@ -141,7 +142,7 @@ export class GmailAdapter {
         threadsTotal: response.data.threadsTotal || 0,
       };
     } catch (error) {
-      throw this.handleGmailError(error, 'getProfile');
+      throw handleIntegrationError(error, 'Google Gmail', 'getProfile');
     }
   }
 
@@ -169,7 +170,7 @@ export class GmailAdapter {
         threadId: response.data.threadId || '',
       };
     } catch (error) {
-      throw this.handleGmailError(error, 'sendMessage', { message });
+      throw handleIntegrationError(error, 'Google Gmail', 'sendMessage', { message });
     }
   }
 
@@ -253,80 +254,6 @@ export class GmailAdapter {
     return '';
   }
 
-  /**
-   * Handle Gmail API errors and convert them to standardized SphyrError
-   */
-  private handleGmailError(error: unknown, operation: string, context: Record<string, unknown> = {}): IntegrationError {
-    const sphyrError = toSphyrError(error, {
-      provider: 'Google Gmail',
-      operation,
-      ...context,
-    });
-
-    // Handle specific Gmail API error codes
-    if (error && typeof error === 'object' && 'code' in error) {
-      const errorCode = (error as { code?: number }).code;
-      
-      if (errorCode === 401) {
-        return new IntegrationError(
-          'Google Gmail',
-          'Authentication failed. Please reconnect your Gmail account.',
-          {
-            originalError: error as unknown as Error,
-            operation,
-            ...context,
-          }
-        );
-      }
-
-      if (errorCode === 403) {
-        return new IntegrationError(
-          'Google Gmail',
-          'Insufficient permissions. Please check your Gmail access permissions.',
-          {
-            originalError: error as unknown as Error,
-            operation,
-            ...context,
-          }
-        );
-      }
-
-      if (errorCode === 429) {
-        return new IntegrationError(
-          'Google Gmail',
-          'Rate limit exceeded. Please try again later.',
-          {
-            originalError: error as unknown as Error,
-            operation,
-            ...context,
-          }
-        );
-      }
-
-      if (errorCode && errorCode >= 500) {
-        return new IntegrationError(
-          'Google Gmail',
-          'Gmail service is temporarily unavailable. Please try again later.',
-          {
-            originalError: error as unknown as Error,
-            operation,
-            ...context,
-          }
-        );
-      }
-    }
-
-    // For any other error, wrap it as an IntegrationError
-    return new IntegrationError(
-      'Google Gmail',
-      sphyrError.message,
-      {
-        originalError: error as Error,
-        operation,
-        ...context,
-      }
-    );
-  }
 
   /**
    * Refresh OAuth2 tokens
@@ -345,7 +272,7 @@ export class GmailAdapter {
         refreshToken: credentials.refresh_token || '',
       };
     } catch (error) {
-      throw this.handleGmailError(error, 'refreshTokens');
+      throw handleIntegrationError(error, 'Google Gmail', 'refreshTokens');
     }
   }
 

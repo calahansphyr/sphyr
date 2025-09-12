@@ -4,144 +4,234 @@
  */
 
 import React from 'react';
+import Head from 'next/head';
 import Link from 'next/link';
-import { UserNav } from '@/components/layout';
+import { MainLayout } from '@/components/layout';
+import { GlobalSearchBar } from '@/components/search';
+import { motion } from 'framer-motion';
+import { Button } from '@/components/ui/button';
+import { 
+  Search, 
+  Brain, 
+  Zap, 
+  Globe, 
+  ArrowRight,
+  CheckCircle
+} from 'lucide-react';
 
 export default function HomePage(): React.JSX.Element {
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-bold text-gray-900">Sphyr</h1>
-            </div>
-            <div className="flex items-center space-x-4">
-              <UserNav />
-            </div>
-          </div>
-        </div>
-      </header>
+  const handleSearch = (query: string) => {
+    // Navigate to search page with query
+    window.location.href = `/search?q=${encodeURIComponent(query)}`;
+  };
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="text-center">
-          <h1 className="text-4xl font-bold text-gray-900 mb-6">
-            AI-Powered Search Platform
-          </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Search across all your connected business tools and integrations with the power of AI. 
-            Find anything, anywhere, instantly.
-          </p>
-          
-          <div className="space-y-4 sm:space-y-0 sm:space-x-4 sm:flex sm:justify-center">
-            <Link
-              href="/search"
-              className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-            >
-              Start Searching
-              <svg
-                className="ml-2 -mr-1 w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                />
-              </svg>
-            </Link>
+  return (
+    <>
+      <Head>
+        <title>Sphyr - AI-Powered Search Platform</title>
+        <meta name="description" content="Search across all your connected business tools and integrations with the power of AI. Find anything, anywhere, instantly." />
+      </Head>
+      <MainLayout>
+        <div className="max-w-7xl mx-auto">
+        {/* Hero Section */}
+        <div className="text-center py-16">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+          >
+            <div className="flex items-center justify-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-primary-500 rounded-xl flex items-center justify-center">
+                <Brain className="h-6 w-6 text-white" />
+              </div>
+              <h1 className="text-4xl font-bold text-text-primary">
+                AI-Powered Search Platform
+              </h1>
+            </div>
             
-            <Link
-              href="/dashboard"
-              className="inline-flex items-center px-6 py-3 border border-gray-300 text-base font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-            >
-              View Dashboard
-            </Link>
-          </div>
+            <p className="text-xl text-text-secondary mb-8 max-w-3xl mx-auto">
+              Search across all your connected business tools and integrations with the power of AI. 
+              Find anything, anywhere, instantly.
+            </p>
+            
+            {/* Global Search Bar */}
+            <div className="max-w-2xl mx-auto mb-8">
+              <GlobalSearchBar
+                placeholder="Search across all your connected platforms..."
+                onSearch={handleSearch}
+                size="large"
+                showAIBranding={true}
+                showSuggestions={true}
+                className="shadow-lg"
+              />
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button size="lg" onClick={() => handleSearch('')}>
+                <Search className="mr-2 h-5 w-5" />
+                Start Searching
+              </Button>
+              
+              <Button variant="outline" size="lg" asChild>
+                <Link href="/dashboard">
+                  <ArrowRight className="mr-2 h-5 w-5" />
+                  View Dashboard
+                </Link>
+              </Button>
+            </div>
+          </motion.div>
         </div>
 
         {/* Features Section */}
-        <div className="mt-20">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="bg-blue-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <svg
-                  className="w-8 h-8 text-blue-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
+        <div className="py-16">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.2 }}
+          >
+            <h2 className="text-3xl font-bold text-center text-text-primary mb-12">
+              Why Choose Sphyr?
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Search className="h-8 w-8 text-primary-500" />
+                </div>
+                <h3 className="text-xl font-semibold text-text-primary mb-2">
+                  Universal Search
+                </h3>
+                <p className="text-text-secondary">
+                  Search across all your connected tools from a single interface
+                </p>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Universal Search
-              </h3>
-              <p className="text-gray-600">
-                Search across all your connected tools from a single interface
-              </p>
-            </div>
 
-            <div className="text-center">
-              <div className="bg-green-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <svg
-                  className="w-8 h-8 text-green-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                  />
-                </svg>
+              <div className="text-center">
+                <div className="w-16 h-16 bg-accent-green/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Brain className="h-8 w-8 text-accent-green" />
+                </div>
+                <h3 className="text-xl font-semibold text-text-primary mb-2">
+                  AI-Powered
+                </h3>
+                <p className="text-text-secondary">
+                  Intelligent query processing and result ranking with advanced AI
+                </p>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                AI-Powered
-              </h3>
-              <p className="text-gray-600">
-                Intelligent query processing and result ranking with Cerebras AI
-              </p>
-            </div>
 
-            <div className="text-center">
-              <div className="bg-purple-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-4">
-                <svg
-                  className="w-8 h-8 text-purple-600"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M13 10V3L4 14h7v7l9-11h-7z"
-                  />
-                </svg>
+              <div className="text-center">
+                <div className="w-16 h-16 bg-accent-purple/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Zap className="h-8 w-8 text-accent-purple" />
+                </div>
+                <h3 className="text-xl font-semibold text-text-primary mb-2">
+                  Lightning Fast
+                </h3>
+                <p className="text-text-secondary">
+                  Get results instantly with optimized search and caching
+                </p>
               </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Lightning Fast
-              </h3>
-              <p className="text-gray-600">
-                Get results instantly with optimized search and caching
-              </p>
             </div>
-          </div>
+          </motion.div>
         </div>
-      </main>
-    </div>
+
+        {/* Benefits Section */}
+        <div className="py-16 bg-background-secondary rounded-2xl">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="max-w-4xl mx-auto text-center"
+          >
+            <h2 className="text-3xl font-bold text-text-primary mb-8">
+              Transform Your Workflow
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 text-left">
+              <div className="space-y-4">
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="h-6 w-6 text-accent-green mt-1" />
+                  <div>
+                    <h3 className="font-semibold text-text-primary">Save Time</h3>
+                    <p className="text-text-secondary">Find documents and information 10x faster than traditional search</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="h-6 w-6 text-accent-green mt-1" />
+                  <div>
+                    <h3 className="font-semibold text-text-primary">Stay Organized</h3>
+                    <p className="text-text-secondary">Keep all your business tools connected and searchable in one place</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="h-6 w-6 text-accent-green mt-1" />
+                  <div>
+                    <h3 className="font-semibold text-text-primary">Make Better Decisions</h3>
+                    <p className="text-text-secondary">Access all relevant information instantly for informed decision-making</p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="h-6 w-6 text-accent-green mt-1" />
+                  <div>
+                    <h3 className="font-semibold text-text-primary">Secure & Private</h3>
+                    <p className="text-text-secondary">Enterprise-grade security with complete data privacy protection</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="h-6 w-6 text-accent-green mt-1" />
+                  <div>
+                    <h3 className="font-semibold text-text-primary">Easy Integration</h3>
+                    <p className="text-text-secondary">Connect your favorite tools in minutes with our simple setup</p>
+                  </div>
+                </div>
+                
+                <div className="flex items-start space-x-3">
+                  <CheckCircle className="h-6 w-6 text-accent-green mt-1" />
+                  <div>
+                    <h3 className="font-semibold text-text-primary">Smart Insights</h3>
+                    <p className="text-text-secondary">Get AI-powered insights and recommendations from your data</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+
+        {/* CTA Section */}
+        <div className="py-16 text-center">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.6 }}
+          >
+            <h2 className="text-3xl font-bold text-text-primary mb-4">
+              Ready to Get Started?
+            </h2>
+            <p className="text-lg text-text-secondary mb-8 max-w-2xl mx-auto">
+              Join thousands of teams who have transformed their workflow with Sphyr
+            </p>
+            
+            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+              <Button size="lg" onClick={() => handleSearch('')}>
+                <Search className="mr-2 h-5 w-5" />
+                Start Searching Now
+              </Button>
+              
+              <Button variant="outline" size="lg" asChild>
+                <Link href="/integrations">
+                  <Globe className="mr-2 h-5 w-5" />
+                  Connect Your Tools
+                </Link>
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </MainLayout>
+    </>
   );
 }

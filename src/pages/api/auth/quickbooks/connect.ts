@@ -5,6 +5,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { reportError } from '@/lib/monitoring';
+import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
 import { createErrorResponse } from '@/lib/schemas';
 
@@ -61,7 +62,10 @@ export default async function handler(
     res.redirect(302, authUrl.toString());
 
   } catch (error) {
-    console.error('QuickBooks OAuth connect error:', error);
+    logger.error('QuickBooks OAuth connect error', error as Error, {
+      operation: 'generateAuthUrl',
+      endpoint: '/api/auth/quickbooks/connect'
+    });
     
     // Report error to monitoring service
     await reportError(error as Error, {

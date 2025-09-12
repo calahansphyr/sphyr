@@ -5,8 +5,9 @@ import { ValidationError, AuthenticationError } from '@/lib/errors';
 import { createClient } from '@/lib/supabase/server';
 import { reportError } from '@/lib/monitoring';
 import { logger } from '@/lib/logger';
+import { validateRequest } from '@/lib/middleware/validation';
 
-export default async function handler(
+async function profileHandler(
   req: NextApiRequest,
   res: NextApiResponse
 ): Promise<void> {
@@ -29,8 +30,29 @@ export default async function handler(
         return;
       }
 
-      // Mock user profile data (in production, fetch from database)
-      const userProfile: UserProfile = {
+      // Fetch user profile from database
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        // PGRST116 is "not found" error, which is acceptable for new users
+        await reportError(profileError, { 
+          endpoint: '/api/user/profile', 
+          operation: 'getProfile',
+          userId: user.id 
+        });
+        res.status(500).json(createErrorResponse(
+          'Failed to fetch profile',
+          'PROFILE_FETCH_ERROR'
+        ));
+        return;
+      }
+
+      // Use database profile or create fallback from auth data
+      const userProfile: UserProfile = profile || {
         id: user.id,
         name: user.user_metadata?.name || 'User',
         email: user.email || '',
@@ -76,13 +98,20 @@ export default async function handler(
 
       const updateData = validationResult.data;
 
-      // Update user metadata in Supabase
-      const { error: updateError } = await supabase.auth.updateUser({
-        data: {
+      // Update user profile in database (upsert to handle new users)
+      const { data: updatedProfile, error: updateError } = await supabase
+        .from('user_profiles')
+        .upsert({
+          user_id: user.id,
           name: updateData.name,
+          email: user.email,
           preferences: updateData.preferences,
-        }
-      });
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
+        })
+        .select()
+        .single();
 
       if (updateError) {
         await reportError(updateError, { 
@@ -97,9 +126,16 @@ export default async function handler(
         return;
       }
 
+      // Also update auth metadata for consistency
+      await supabase.auth.updateUser({
+        data: {
+          name: updateData.name,
+        }
+      });
+
       res.status(200).json(createSuccessResponse(
         'Profile updated successfully',
-        { id: user.id, ...updateData }
+        updatedProfile
       ));
 
     } else {
@@ -127,3 +163,9 @@ export default async function handler(
     ));
   }
 }
+
+// Export handler with validation middleware
+export default validateRequest({
+  body: UserProfileUpdateSchema.optional(),
+  sanitize: true
+})(profileHandler);

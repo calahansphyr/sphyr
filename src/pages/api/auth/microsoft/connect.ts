@@ -6,6 +6,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { ConfidentialClientApplication } from '@azure/msal-node';
 import { reportError } from '@/lib/monitoring';
+import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
 import { createErrorResponse } from '@/lib/schemas';
 
@@ -76,7 +77,10 @@ export default async function handler(
     res.redirect(302, authUrl);
 
   } catch (error) {
-    console.error('Microsoft OAuth connect error:', error);
+    logger.error('Microsoft OAuth connect error', error as Error, {
+      operation: 'generateAuthUrl',
+      endpoint: '/api/auth/microsoft/connect'
+    });
     
     // Report error to monitoring service
     await reportError(error as Error, {

@@ -1,88 +1,67 @@
 /**
- * Type definitions for Cerebras AI integration
+ * AI-related type definitions for Sphyr
+ * Provides type safety for AI operations and data structures
  */
 
-export interface CerebrasRequest {
-  model: string;
-  messages: CerebrasMessage[];
-  max_tokens?: number;
-  temperature?: number;
-  stream?: boolean;
-}
-
-export interface CerebrasMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
-}
-
-export interface CerebrasResponse {
+export interface SearchHistoryItem {
   id: string;
-  object: string;
-  created: number;
-  model: string;
-  choices: CerebrasChoice[];
-  usage: CerebrasUsage;
+  query: string;
+  timestamp: number;
+  resultsCount: number;
+  userId: string;
+  organizationId?: string;
 }
 
-export interface CerebrasChoice {
-  index: number;
-  message: CerebrasMessage;
-  finish_reason: string;
+export interface IntegrationStatus {
+  provider: string;
+  connected: boolean;
+  connectedAt?: string;
+  lastSync?: string;
+  permissions?: string[];
+  scopes?: string[];
 }
 
-export interface CerebrasUsage {
-  prompt_tokens: number;
-  completion_tokens: number;
-  total_tokens: number;
+export interface OrganizationData {
+  id: string;
+  name: string;
+  settings: Record<string, unknown>;
+  integrations: IntegrationStatus[];
+  preferences?: {
+    theme?: 'light' | 'dark' | 'auto';
+    notifications?: boolean;
+    dataSharing?: boolean;
+  };
+}
+
+export interface QueryContext {
+  recentSearches: SearchHistoryItem[];
+  userHistory: SearchHistoryItem[];
+  activeIntegrations: IntegrationStatus[];
+  organizationData: OrganizationData;
 }
 
 export interface QueryProcessingRequest {
   originalQuery: string;
-  context: QueryContext;
   userId: string;
   organizationId: string;
+  context: QueryContext;
 }
 
 export interface QueryProcessingResponse {
+  intent: {
+    type: 'search' | 'filter' | 'navigate' | 'action';
+    category: string;
+    confidence: number;
+  };
+  entities: Array<{
+    type: string;
+    value: string;
+    confidence: number;
+    position: { start: number; end: number };
+  }>;
   processedQuery: string;
-  intent: QueryIntent;
-  entities: QueryEntity[];
   confidence: number;
-}
-
-export interface QueryContext {
-  userHistory: string[];
-  organizationData: Record<string, unknown>;
-  recentSearches: string[];
-  activeIntegrations: string[];
-}
-
-export interface QueryIntent {
-  type: 'search' | 'filter' | 'action' | 'question';
-  category: string;
-  confidence: number;
-}
-
-export interface QueryEntity {
-  type: 'date' | 'person' | 'project' | 'document' | 'status';
-  value: string;
-  confidence: number;
-}
-
-export interface ResultRankingRequest {
-  query: string;
-  results: AISearchResult[];
-  context: QueryContext;
-}
-
-export interface ResultRankingResponse {
-  rankedResults: RankedSearchResult[];
-  rankingExplanation: string;
-}
-
-export interface RankedSearchResult extends AISearchResult {
-  relevanceScore: number;
-  rankingReason: string;
+  suggestions?: string[];
 }
 
 export interface AISearchResult {
@@ -92,6 +71,55 @@ export interface AISearchResult {
   source: string;
   integrationType: string;
   metadata: Record<string, unknown>;
-  url?: string;
   createdAt: string;
+  updatedAt?: string;
+  url?: string;
+}
+
+export interface RankedSearchResult extends AISearchResult {
+  relevanceScore: number;
+  rankingReason: string;
+}
+
+export interface ResultRankingRequest {
+  query: string;
+  results: AISearchResult[];
+  context: QueryContext;
+}
+
+export interface ResultRankingResponse {
+  rankedResults: Array<{
+    id: string;
+    relevanceScore: number;
+    rankingReason: string;
+  }>;
+  rankingExplanation: string;
+}
+
+export interface CerebrasRequest {
+  query?: string;
+  model?: string;
+  messages?: Array<{
+    role: string;
+    content: string;
+  }>;
+  max_tokens?: number;
+  temperature?: number;
+  context?: Record<string, unknown>;
+  options?: Record<string, unknown>;
+}
+
+export interface CerebrasResponse {
+  choices: Array<{
+    message: {
+      content: string;
+    };
+  }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+  model?: string;
+  created?: number;
 }

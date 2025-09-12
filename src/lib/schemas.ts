@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod';
+import { CONTENT_LIMITS } from './constants';
 
 /**
  * Search API Request Schema
@@ -12,7 +13,7 @@ import { z } from 'zod';
 export const SearchRequestSchema = z.object({
   query: z.string()
     .min(1, 'Query cannot be empty')
-    .max(500, 'Query must be less than 500 characters')
+    .max(CONTENT_LIMITS.MAX_QUERY_LENGTH, `Query must be less than ${CONTENT_LIMITS.MAX_QUERY_LENGTH} characters`)
     .trim(),
   userId: z.string()
     .uuid('Invalid user ID format')
@@ -182,6 +183,75 @@ export const ExtendedSearchRequestSchema = SearchRequestSchema
   .merge(SearchFiltersSchema);
 
 /**
+ * Analytics Request Schema
+ * Validates analytics and reporting requests
+ */
+export const AnalyticsRequestSchema = z.object({
+  metric: z.enum([
+    'search_volume',
+    'user_activity',
+    'integration_usage',
+    'performance_metrics',
+    'error_rates'
+  ]),
+  timeRange: z.object({
+    start: z.string().datetime(),
+    end: z.string().datetime(),
+  }),
+  filters: z.record(z.string(), z.unknown()).optional(),
+  granularity: z.enum(['hour', 'day', 'week', 'month']).default('day'),
+});
+
+/**
+ * Integration Configuration Schema
+ * Validates integration configuration updates
+ */
+export const IntegrationConfigSchema = z.object({
+  provider: z.enum([
+    'google',
+    'slack',
+    'asana',
+    'hubspot',
+    'quickbooks',
+    'procore',
+    'buildertrend'
+  ]),
+  settings: z.record(z.string(), z.unknown()).optional(),
+  enabled: z.boolean().default(true),
+  syncFrequency: z.enum(['realtime', 'hourly', 'daily', 'weekly']).default('hourly'),
+});
+
+/**
+ * User Account Deletion Schema
+ * Validates account deletion requests
+ */
+export const AccountDeletionSchema = z.object({
+  confirmation: z.literal('DELETE_MY_ACCOUNT'),
+  reason: z.string().max(CONTENT_LIMITS.MAX_REASON_LENGTH).optional(),
+  exportData: z.boolean().default(false),
+});
+
+/**
+ * Health Check Schema
+ * Validates health check requests
+ */
+export const HealthCheckSchema = z.object({
+  includeDetails: z.boolean().default(false),
+  checkServices: z.array(z.string()).optional(),
+});
+
+/**
+ * Rate Limiting Schema
+ * Validates rate limiting configuration
+ */
+export const RateLimitSchema = z.object({
+  windowMs: z.number().int().min(1000).max(3600000), // 1 second to 1 hour
+  maxRequests: z.number().int().min(1).max(10000),
+  skipSuccessfulRequests: z.boolean().default(false),
+  skipFailedRequests: z.boolean().default(false),
+});
+
+/**
  * Type exports for use in API routes
  */
 export type SearchRequest = z.infer<typeof SearchRequestSchema>;
@@ -194,6 +264,11 @@ export type SuccessResponse = z.infer<typeof SuccessResponseSchema>;
 export type Pagination = z.infer<typeof PaginationSchema>;
 export type SearchFilters = z.infer<typeof SearchFiltersSchema>;
 export type ExtendedSearchRequest = z.infer<typeof ExtendedSearchRequestSchema>;
+export type AnalyticsRequest = z.infer<typeof AnalyticsRequestSchema>;
+export type IntegrationConfig = z.infer<typeof IntegrationConfigSchema>;
+export type AccountDeletion = z.infer<typeof AccountDeletionSchema>;
+export type HealthCheck = z.infer<typeof HealthCheckSchema>;
+export type RateLimit = z.infer<typeof RateLimitSchema>;
 
 /**
  * Utility function to create standardized error responses

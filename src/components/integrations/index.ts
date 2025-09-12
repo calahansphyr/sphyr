@@ -6,7 +6,9 @@
 // This file will be populated as integration components are created
 // For now, it serves as a placeholder for integration components
 
-export {};
+export { default as IntegrationBadge } from './IntegrationBadge';
+export { default as ConnectIntegrationModal } from './ConnectIntegrationModal';
+export { default as EnhancedIntegrationsPage } from './EnhancedIntegrationsPage';
 
 // Future exports will include:
 // export { IntegrationCard } from './IntegrationCard';

@@ -1,0 +1,69 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*' ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v2
+      with:
+        version: 8
+
+    - name: Install dependencies
+      run: pnpm install --frozen-lockfile
+
+    - name: Run tests
+      run: pnpm test --run
+
+    - name: Build application
+      run: pnpm build
+      env:
+        NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+        GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+        SLACK_CLIENT_ID: ${{ secrets.SLACK_CLIENT_ID }}
+        SLACK_CLIENT_SECRET: ${{ secrets.SLACK_CLIENT_SECRET }}
+        ASANA_CLIENT_ID: ${{ secrets.ASANA_CLIENT_ID }}
+        ASANA_CLIENT_SECRET: ${{ secrets.ASANA_CLIENT_SECRET }}
+        QUICKBOOKS_CLIENT_ID: ${{ secrets.QUICKBOOKS_CLIENT_ID }}
+        QUICKBOOKS_CLIENT_SECRET: ${{ secrets.QUICKBOOKS_CLIENT_SECRET }}
+        MICROSOFT_CLIENT_ID: ${{ secrets.MICROSOFT_CLIENT_ID }}
+        MICROSOFT_CLIENT_SECRET: ${{ secrets.MICROSOFT_CLIENT_SECRET }}
+        PROCORE_CLIENT_ID: ${{ secrets.PROCORE_CLIENT_ID }}
+        PROCORE_CLIENT_SECRET: ${{ secrets.PROCORE_CLIENT_SECRET }}
+        NEXT_PUBLIC_BASE_URL: https://app.sphyr.com
+
+    - name: Deploy to Vercel
+      uses: amondnet/vercel-action@v25
+      with:
+        vercel-token: ${{ secrets.VERCEL_TOKEN }}
+        vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
+        vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
+        vercel-args: '--prod'
+
+    - name: Notify deployment success
+      if: success()
+      run: |
+        echo "✅ Deployment successful!"
+        echo "🚀 Application deployed to production"
+
+    - name: Notify deployment failure
+      if: failure()
+      run: |
+        echo "❌ Deployment failed!"
+        echo "🔍 Check the logs for details"

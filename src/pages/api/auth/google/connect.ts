@@ -6,6 +6,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { google } from 'googleapis';
 import { reportError } from '@/lib/monitoring';
+import { logger } from '@/lib/logger';
 import { ValidationError } from '@/lib/errors';
 import { createErrorResponse } from '@/lib/schemas';
 
@@ -15,7 +16,11 @@ export default async function handler(
 ) {
   if (req.method !== 'GET') {
     res.setHeader('Allow', ['GET']);
-    return res.status(405).json({ error: `Method ${req.method} Not Allowed` });
+    return res.status(405).json(createErrorResponse(
+      `Method ${req.method} Not Allowed`,
+      'METHOD_NOT_ALLOWED',
+      { allowedMethods: ['GET'] }
+    ));
   }
 
   try {
@@ -64,13 +69,20 @@ export default async function handler(
       include_granted_scopes: true,
     });
 
-    console.log('Generated Google OAuth URL:', authUrl);
+    logger.info('Generated Google OAuth URL', {
+      operation: 'generateAuthUrl',
+      endpoint: '/api/auth/google/connect',
+      authUrl: authUrl.substring(0, 100) + '...' // Log partial URL for security
+    });
 
     // Redirect user to Google's OAuth consent screen
     res.redirect(302, authUrl);
 
   } catch (error) {
-    console.error('Google OAuth connect error:', error);
+    logger.error('Google OAuth connect error', error as Error, {
+      operation: 'generateAuthUrl',
+      endpoint: '/api/auth/google/connect'
+    });
     
     // Report error to monitoring service
     await reportError(error as Error, {

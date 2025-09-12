@@ -26,8 +26,8 @@ export interface User {
 export function storeAuthTokens(tokens: AuthTokens): void {
   if (typeof window === 'undefined') return;
   
-  localStorage.setItem(STORAGE_KEYS.authToken, tokens.accessToken);
-  localStorage.setItem(STORAGE_KEYS.refreshToken, tokens.refreshToken);
+  localStorage.setItem(STORAGE_KEYS.AUTH_TOKENS, tokens.accessToken);
+  localStorage.setItem(STORAGE_KEYS.AUTH_TOKENS + '_refresh', tokens.refreshToken);
   localStorage.setItem('sphyr_token_expires', tokens.expiresAt.toString());
 }
 
@@ -37,8 +37,8 @@ export function storeAuthTokens(tokens: AuthTokens): void {
 export function getAuthTokens(): AuthTokens | null {
   if (typeof window === 'undefined') return null;
   
-  const accessToken = localStorage.getItem(STORAGE_KEYS.authToken);
-  const refreshToken = localStorage.getItem(STORAGE_KEYS.refreshToken);
+  const accessToken = localStorage.getItem(STORAGE_KEYS.AUTH_TOKENS);
+  const refreshToken = localStorage.getItem(STORAGE_KEYS.AUTH_TOKENS + '_refresh');
   const expiresAt = localStorage.getItem('sphyr_token_expires');
   
   if (!accessToken || !refreshToken || !expiresAt) {
@@ -58,8 +58,8 @@ export function getAuthTokens(): AuthTokens | null {
 export function clearAuthTokens(): void {
   if (typeof window === 'undefined') return;
   
-  localStorage.removeItem(STORAGE_KEYS.authToken);
-  localStorage.removeItem(STORAGE_KEYS.refreshToken);
+  localStorage.removeItem(STORAGE_KEYS.AUTH_TOKENS);
+  localStorage.removeItem(STORAGE_KEYS.AUTH_TOKENS + '_refresh');
   localStorage.removeItem('sphyr_token_expires');
 }
 

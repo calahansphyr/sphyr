@@ -21,7 +21,7 @@ class ApiClient {
   private defaultHeaders: Record<string, string>;
 
   constructor() {
-    this.baseUrl = API_CONFIG.baseUrl;
+    this.baseUrl = API_CONFIG.BASE_URL;
     this.defaultHeaders = {
       'Content-Type': 'application/json',
     };
@@ -60,7 +60,7 @@ class ApiClient {
 
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.timeout);
+      const timeoutId = setTimeout(() => controller.abort(), API_CONFIG.TIMEOUT);
 
       const response = await fetch(url, {
         ...config,
@@ -72,7 +72,7 @@ class ApiClient {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const apiError = new APIError(
-          errorData.message || ERROR_MESSAGES.serverError,
+          errorData.message || ERROR_MESSAGES.INTERNAL_SERVER_ERROR,
           response.status,
           {
             url,
@@ -101,14 +101,14 @@ class ApiClient {
       }
 
       // Network or timeout error - retry if attempts remaining
-      if (retryCount < API_CONFIG.retryAttempts) {
+      if (retryCount < API_CONFIG.RETRY_ATTEMPTS) {
         await this.delay(Math.pow(2, retryCount) * 1000); // Exponential backoff
         return this.request<T>(endpoint, options, retryCount + 1);
       }
 
       // Create a network error for the final failure
       const networkError = new NetworkError(
-        error instanceof Error ? error.message : ERROR_MESSAGES.network,
+        error instanceof Error ? error.message : ERROR_MESSAGES.NETWORK_ERROR,
         {
           url,
           method: config.method || 'GET',

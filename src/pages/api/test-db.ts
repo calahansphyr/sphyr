@@ -1,5 +1,6 @@
 import { createServiceClient } from '../../lib/supabase/server';
 import { logger, generateRequestId } from '../../lib/logger';
+import { createErrorResponse } from '../../lib/schemas';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 interface TestResponse {
@@ -11,7 +12,7 @@ interface TestResponse {
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<TestResponse>
+  res: NextApiResponse<TestResponse | { error: string; code?: string; details?: unknown; timestamp: string; requestId?: string }>
 ): Promise<void> {
   const requestId = generateRequestId();
   logger.setRequestId(requestId);
@@ -81,10 +82,13 @@ export default async function handler(
       operation: 'database_test',
       endpoint: '/api/test-db'
     });
-    res.status(500).json({ 
-      success: false, 
-      message: 'Connection test failed',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    });
+    res.status(500).json(createErrorResponse(
+      'Database connection test failed',
+      'DATABASE_CONNECTION_ERROR',
+      { 
+        error: error instanceof Error ? error.message : 'Unknown error',
+        operation: 'database_test'
+      }
+    ));
   }
 }

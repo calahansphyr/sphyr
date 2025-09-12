@@ -4,6 +4,7 @@
  */
 
 import type { AISearchResult } from '@/types/ai';
+import { CONTENT_LIMITS } from '../constants';
 import type { 
   GmailMessage, 
   GoogleDriveFile, 
@@ -174,7 +175,7 @@ export class ResultTransformer {
     return gmailResults.messages.map((message: GmailMessage) => ({
       id: `gmail-${message.id}`,
       title: message.subject || 'No Subject',
-      content: message.snippet || message.body.substring(0, 500),
+      content: message.snippet || message.body.substring(0, CONTENT_LIMITS.MAX_CONTENT_PREVIEW_LENGTH),
       source: 'Gmail',
       integrationType: 'google_gmail' as const,
       metadata: {
@@ -432,17 +433,37 @@ export class ResultTransformer {
     // Extract individual Microsoft results
     const microsoftOutlookResults = microsoftResults.find(r => r.service === 'outlook')?.data as { messages?: OutlookMessage[] } || { messages: [] };
     const microsoftOneDriveResults = microsoftResults.find(r => r.service === 'onedrive')?.data as { files?: OneDriveFile[] } || { files: [] };
-    // TODO: Implement calendar, word, and excel result transformations
-    // const microsoftCalendarResults = microsoftResults.find(r => r.service === 'calendar')?.data as { events?: OutlookCalendarEvent[] } || { events: [] };
-    // const microsoftWordResults = microsoftResults.find(r => r.service === 'word')?.data as { documents?: WordDocument[] } || { documents: [] };
-    // const microsoftExcelResults = microsoftResults.find(r => r.service === 'excel')?.data as { workbooks?: ExcelWorkbook[] } || { workbooks: [] };
+    // Extract additional Microsoft service results
+    const microsoftCalendarResults = microsoftResults.find(r => r.service === 'calendar')?.data as { events?: Array<{
+      id: string;
+      subject: string;
+      start: { dateTime: string };
+      end: { dateTime: string };
+      location?: { displayName: string };
+    }> } || { events: [] };
+    
+    const microsoftWordResults = microsoftResults.find(r => r.service === 'word')?.data as { documents?: Array<{
+      id: string;
+      name: string;
+      webUrl: string;
+      lastModifiedDateTime: string;
+      size: number;
+    }> } || { documents: [] };
+    
+    const microsoftExcelResults = microsoftResults.find(r => r.service === 'excel')?.data as { workbooks?: Array<{
+      id: string;
+      name: string;
+      webUrl: string;
+      lastModifiedDateTime: string;
+      size: number;
+    }> } || { workbooks: [] };
 
     // Transform Outlook messages
     if (microsoftOutlookResults.messages) {
       results.push(...microsoftOutlookResults.messages.map((message: OutlookMessage) => ({
         id: `outlook-${message.id}`,
         title: message.subject || 'No Subject',
-        content: message.bodyPreview || message.body.substring(0, 500),
+        content: message.bodyPreview || message.body.substring(0, CONTENT_LIMITS.MAX_CONTENT_PREVIEW_LENGTH),
         source: 'Microsoft Outlook',
         integrationType: 'microsoft_outlook' as const,
         metadata: {
@@ -474,6 +495,61 @@ export class ResultTransformer {
         },
         url: file.webUrl || `https://onedrive.live.com/?id=${file.id}`,
         createdAt: file.createdDateTime,
+      })));
+    }
+
+    // Transform Calendar events
+    if (microsoftCalendarResults.events) {
+      results.push(...microsoftCalendarResults.events.map((event) => ({
+        id: `calendar-${event.id}`,
+        title: event.subject || 'Untitled Event',
+        content: `Event from ${new Date(event.start.dateTime).toLocaleString()} to ${new Date(event.end.dateTime).toLocaleString()}${event.location?.displayName ? ` at ${event.location.displayName}` : ''}`,
+        source: 'Microsoft Calendar',
+        integrationType: 'microsoft_calendar' as const,
+        metadata: {
+          eventId: event.id,
+          startTime: event.start.dateTime,
+          endTime: event.end.dateTime,
+          location: event.location?.displayName,
+        },
+        url: `https://outlook.office.com/calendar/deeplink/read/${event.id}`,
+        createdAt: event.start.dateTime,
+      })));
+    }
+
+    // Transform Word documents
+    if (microsoftWordResults.documents) {
+      results.push(...microsoftWordResults.documents.map((doc) => ({
+        id: `word-${doc.id}`,
+        title: doc.name,
+        content: `Word document (${Math.round(doc.size / 1024)}KB) - Last modified: ${new Date(doc.lastModifiedDateTime).toLocaleString()}`,
+        source: 'Microsoft Word',
+        integrationType: 'microsoft_word' as const,
+        metadata: {
+          documentId: doc.id,
+          size: doc.size,
+          lastModified: doc.lastModifiedDateTime,
+        },
+        url: doc.webUrl,
+        createdAt: doc.lastModifiedDateTime,
+      })));
+    }
+
+    // Transform Excel workbooks
+    if (microsoftExcelResults.workbooks) {
+      results.push(...microsoftExcelResults.workbooks.map((workbook) => ({
+        id: `excel-${workbook.id}`,
+        title: workbook.name,
+        content: `Excel workbook (${Math.round(workbook.size / 1024)}KB) - Last modified: ${new Date(workbook.lastModifiedDateTime).toLocaleString()}`,
+        source: 'Microsoft Excel',
+        integrationType: 'microsoft_excel' as const,
+        metadata: {
+          workbookId: workbook.id,
+          size: workbook.size,
+          lastModified: workbook.lastModifiedDateTime,
+        },
+        url: workbook.webUrl,
+        createdAt: workbook.lastModifiedDateTime,
       })));
     }
 

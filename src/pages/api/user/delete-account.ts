@@ -10,6 +10,8 @@ import { reportError } from '@/lib/monitoring';
 import { ValidationError, AuthenticationError } from '@/lib/errors';
 import { logger } from '@/lib/logger';
 import { productAnalytics } from '@/lib/analytics';
+import { validateRequest } from '@/lib/middleware/validation';
+import { AccountDeletionSchema } from '@/lib/schemas';
 
 interface DeleteAccountRequest {
   confirmDeletion: boolean;
@@ -26,7 +28,7 @@ interface DeleteAccountResponse {
   error?: string;
 }
 
-export default async function handler(
+async function deleteAccountHandler(
   req: NextApiRequest,
   res: NextApiResponse<DeleteAccountResponse | { error: string }>
 ) {
@@ -234,3 +236,9 @@ export default async function handler(
     });
   }
 }
+
+// Export handler with validation middleware
+export default validateRequest({
+  body: AccountDeletionSchema,
+  sanitize: true
+})(deleteAccountHandler);

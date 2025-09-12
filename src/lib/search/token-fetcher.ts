@@ -38,7 +38,11 @@ export interface OAuthTokens {
 
 export interface TokenFetchResult {
   tokens: OAuthTokens;
-  authUser: unknown; // TODO: Replace with proper Supabase user type
+  authUser: {
+    id: string;
+    email?: string;
+    user_metadata?: Record<string, unknown>;
+  } | null;
 }
 
 export interface OAuthTokenRecord {
@@ -160,7 +164,39 @@ export class TokenFetcher {
    * Validate and refresh tokens if needed
    */
   async validateTokens(tokens: OAuthTokens): Promise<OAuthTokens> {
-    // TODO: Implement token validation and refresh logic
-    return tokens;
+    try {
+      // Basic token validation - check if tokens exist for each provider
+      const providers = Object.keys(tokens) as Array<keyof OAuthTokens>;
+      const validProviders: string[] = [];
+      const invalidProviders: string[] = [];
+      
+      for (const provider of providers) {
+        const providerTokens = tokens[provider];
+        if (providerTokens && providerTokens.accessToken && providerTokens.refreshToken) {
+          validProviders.push(provider);
+        } else {
+          invalidProviders.push(provider);
+        }
+      }
+      
+      if (invalidProviders.length > 0) {
+        logger.warn('Some OAuth tokens are missing or invalid', {
+          operation: 'token_validation',
+          component: 'TokenFetcher',
+          validProviders,
+          invalidProviders
+        });
+      }
+      
+      // For now, return the tokens as-is since refresh logic would require provider-specific implementation
+      // In a production environment, this would call the appropriate OAuth refresh endpoint
+      return tokens;
+    } catch (error) {
+      logger.error('Token validation failed', error as Error, {
+        operation: 'token_validation',
+        component: 'TokenFetcher'
+      });
+      return tokens;
+    }
   }
 }

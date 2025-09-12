@@ -6,7 +6,7 @@
 import { CerebrasClient } from '@/lib/ai/cerebras-client';
 import { productAnalytics } from '@/lib/analytics';
 import { logger } from '@/lib/logger';
-import type { AISearchResult, RankedSearchResult } from '@/types/ai';
+import type { AISearchResult, RankedSearchResult, IntegrationStatus } from '@/types/ai';
 
 export interface SmartSearchResponse {
   message: string;
@@ -61,14 +61,29 @@ export class ResponseBuilder {
     } = request;
 
     // Step 4: Rank results using AI
+    const activeIntegrationStrings = this.getActiveIntegrations(aiSearchResults);
+    const activeIntegrations: IntegrationStatus[] = activeIntegrationStrings.map(integration => ({
+      provider: integration,
+      connected: true,
+      connectedAt: new Date().toISOString(),
+      lastSync: new Date().toISOString(),
+      permissions: [],
+      scopes: []
+    }));
+
     const rankingRequest = {
       query: originalQuery.trim(),
       results: aiSearchResults,
       context: {
         userHistory: [], // In production, fetch from user's search history
-        organizationData: { organizationId },
+        organizationData: {
+          id: organizationId,
+          name: 'Default Organization',
+          settings: {},
+          integrations: activeIntegrations
+        },
         recentSearches: [], // In production, fetch recent searches
-        activeIntegrations: this.getActiveIntegrations(aiSearchResults),
+        activeIntegrations,
       },
     };
 
@@ -90,10 +105,23 @@ export class ResponseBuilder {
       requestId,
     });
 
+    // Map ranking results to full RankedSearchResult objects
+    const rankedResults: RankedSearchResult[] = rankingResponse.rankedResults.map(ranked => {
+      const originalResult = aiSearchResults.find(result => result.id === ranked.id);
+      if (!originalResult) {
+        throw new Error(`Original result not found for ranked result: ${ranked.id}`);
+      }
+      return {
+        ...originalResult,
+        relevanceScore: ranked.relevanceScore,
+        rankingReason: ranked.rankingReason
+      };
+    });
+
     // Build final response
     const response: SmartSearchResponse = {
       message: 'Smart search completed successfully',
-      data: rankingResponse.rankedResults,
+      data: rankedResults,
       query: originalQuery.trim(),
       processedQuery,
       intent,

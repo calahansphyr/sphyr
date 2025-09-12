@@ -1,0 +1,10 @@
+<testsuites id="" name="" tests="3" failures="0" skipped="0" errors="0" time="4.711616">
+<testsuite name="critical-user-flow.spec.ts" timestamp="2025-09-11T19:34:27.787Z" hostname="chromium" tests="3" failures="0" skipped="0" time="9.513" errors="0">
+<testcase name="Critical User Journey - MVP Validation › Core MVP functionality works: landing → search → integrations" classname="critical-user-flow.spec.ts" time="3.963">
+</testcase>
+<testcase name="Critical User Journey - MVP Validation › Application handles errors gracefully" classname="critical-user-flow.spec.ts" time="4.02">
+</testcase>
+<testcase name="Critical User Journey - MVP Validation › Application is responsive on mobile" classname="critical-user-flow.spec.ts" time="1.53">
+</testcase>
+</testsuite>
+</testsuites>

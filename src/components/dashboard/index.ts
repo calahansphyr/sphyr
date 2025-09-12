@@ -6,7 +6,7 @@
 // This file will be populated as dashboard components are created
 // For now, it serves as a placeholder for dashboard components
 
-export {};
+export { default as EnhancedDashboard } from './EnhancedDashboard';
 
 // Future exports will include:
 // export { DashboardStats } from './DashboardStats';

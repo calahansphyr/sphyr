@@ -4,7 +4,8 @@
  */
 
 import { WebClient } from '@slack/web-api';
-import { IntegrationError, toSphyrError } from '@/lib/errors';
+import { IntegrationError } from '@/lib/errors';
+import { handleIntegrationError } from './error-handler';
 import type { 
   SlackMessage, 
   SlackSearchOptions, 
@@ -86,21 +87,9 @@ export class SlackAdapter {
       };
 
     } catch (error) {
-      const sphyrError = toSphyrError(error, {
-        provider: 'Slack',
-        operation: 'searchMessages',
+      throw handleIntegrationError(error, 'Slack', 'searchMessages', {
         query: options.query,
       });
-
-      throw new IntegrationError(
-        'Slack',
-        `Failed to search messages: ${sphyrError.message}`,
-        {
-          originalError: error as Error,
-          operation: 'searchMessages',
-          query: options.query,
-        }
-      );
     }
   }
 
@@ -128,23 +117,10 @@ export class SlackAdapter {
       return this.parseSlackMessage(message as SlackApiMessage);
 
     } catch (error) {
-      const sphyrError = toSphyrError(error, {
-        provider: 'Slack',
-        operation: 'getMessage',
+      throw handleIntegrationError(error, 'Slack', 'getMessage', {
         channel,
         timestamp,
       });
-
-      throw new IntegrationError(
-        'Slack',
-        `Failed to get message: ${sphyrError.message}`,
-        {
-          originalError: error as Error,
-          operation: 'getMessage',
-          channel,
-          timestamp,
-        }
-      );
     }
   }
 
@@ -169,19 +145,7 @@ export class SlackAdapter {
       }));
 
     } catch (error) {
-      const sphyrError = toSphyrError(error, {
-        provider: 'Slack',
-        operation: 'listChannels',
-      });
-
-      throw new IntegrationError(
-        'Slack',
-        `Failed to list channels: ${sphyrError.message}`,
-        {
-          originalError: error as Error,
-          operation: 'listChannels',
-        }
-      );
+      throw handleIntegrationError(error, 'Slack', 'listChannels');
     }
   }
 
@@ -211,21 +175,9 @@ export class SlackAdapter {
       };
 
     } catch (error) {
-      const sphyrError = toSphyrError(error, {
-        provider: 'Slack',
-        operation: 'getUserInfo',
+      throw handleIntegrationError(error, 'Slack', 'getUserInfo', {
         userId,
       });
-
-      throw new IntegrationError(
-        'Slack',
-        `Failed to get user info: ${sphyrError.message}`,
-        {
-          originalError: error as Error,
-          operation: 'getUserInfo',
-          userId,
-        }
-      );
     }
   }
 
@@ -252,19 +204,7 @@ export class SlackAdapter {
       };
 
     } catch (error) {
-      const sphyrError = toSphyrError(error, {
-        provider: 'Slack',
-        operation: 'getTeamInfo',
-      });
-
-      throw new IntegrationError(
-        'Slack',
-        `Failed to get team info: ${sphyrError.message}`,
-        {
-          originalError: error as Error,
-          operation: 'getTeamInfo',
-        }
-      );
+      throw handleIntegrationError(error, 'Slack', 'getTeamInfo');
     }
   }
 
